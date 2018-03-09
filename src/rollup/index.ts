@@ -103,6 +103,7 @@ export interface InputOptions {
 	experimentalDynamicImport?: boolean;
 	experimentalCodeSplitting?: boolean;
 	preserveSymlinks?: boolean;
+	aggressivelyMergeModules?: boolean;
 
 	// undocumented?
 	pureExternalModules?: boolean;

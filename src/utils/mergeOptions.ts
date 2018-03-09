@@ -81,6 +81,7 @@ export default function mergeOptions({
 		preferConst: getInputOption('preferConst'),
 		experimentalDynamicImport: getInputOption('experimentalDynamicImport'),
 		experimentalCodeSplitting: getInputOption('experimentalCodeSplitting'),
+		aggressivelyMergeModules: getInputOption('aggressivelyMergeModules'),
 		preserveSymlinks: getInputOption('preserveSymlinks')
 	};
 

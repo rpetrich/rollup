@@ -79,6 +79,7 @@ export default class Graph {
 	scope: GlobalScope;
 	treeshakingOptions: TreeshakingOptions;
 	varOrConst: 'var' | 'const';
+	private aggressivelyMergeModules: boolean;
 
 	// deprecated
 	treeshake: boolean;
@@ -184,6 +185,7 @@ export default class Graph {
 
 		this.varOrConst = options.preferConst ? 'const' : 'var';
 		this.legacy = options.legacy;
+		this.aggressivelyMergeModules = options.aggressivelyMergeModules === true;
 
 		this.acornOptions = options.acorn || {};
 		const acornPluginsToInject = [];
@@ -404,7 +406,7 @@ export default class Graph {
 
 						// if the chunk exactly exports the entry point exports then
 						// it can replace the entry point
-						if (chunk.isEntryModuleFacade) {
+						if (chunk.isEntryModuleFacade || this.aggressivelyMergeModules) {
 							chunks['./' + entryName] = chunk;
 							chunk.setId('./' + entryName);
 							return;
@@ -435,6 +437,8 @@ export default class Graph {
 	private analyseExecution(entryModules: Module[]) {
 		let curEntry: Module, curEntryHash: Uint8Array;
 		const allSeen: { [id: string]: boolean } = {};
+		const usedInEntry: { [id: string]: boolean } = {};
+		let aggressivelyMerge = this.aggressivelyMergeModules && entryModules.length === 1;
 
 		const ordered: Module[] = [];
 
@@ -450,7 +454,9 @@ export default class Graph {
 			// entry point and colouring those modules by the hash of its id. Colours are mixed as
 			// hash xors, providing the unique colouring of the graph into unique hash chunks.
 			// This is really all there is to automated chunking, the rest is chunk wiring.
-			Uint8ArrayXor(module.entryPointsHash, curEntryHash);
+			if (usedInEntry[module.id] !== true) {
+				Uint8ArrayXor(module.entryPointsHash, curEntryHash);
+			}
 
 			module.dependencies.forEach(depModule => {
 				if (!depModule.isExternal) {
@@ -478,6 +484,7 @@ export default class Graph {
 
 			if (allSeen[module.id]) return;
 			allSeen[module.id] = true;
+			if (aggressivelyMerge) usedInEntry[module.id] = true;
 
 			module.execIndex = ordered.length;
 			ordered.push(module);
@@ -488,6 +495,7 @@ export default class Graph {
 			curEntry.isEntryPoint = true;
 			curEntryHash = randomUint8Array(10);
 			visit(curEntry);
+			aggressivelyMerge = false;
 		}
 
 		// new items can be added during this loop
