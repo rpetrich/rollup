@@ -104,6 +104,7 @@ export interface InputOptions {
 	experimentalCodeSplitting?: boolean;
 	preserveSymlinks?: boolean;
 	aggressivelyMergeModules?: boolean;
+	hashedChunkNames?: boolean;
 
 	// undocumented?
 	pureExternalModules?: boolean;

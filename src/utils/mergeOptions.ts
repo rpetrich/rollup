@@ -82,6 +82,7 @@ export default function mergeOptions({
 		experimentalDynamicImport: getInputOption('experimentalDynamicImport'),
 		experimentalCodeSplitting: getInputOption('experimentalCodeSplitting'),
 		aggressivelyMergeModules: getInputOption('aggressivelyMergeModules'),
+		hashedChunkNames: getInputOption('hashedChunkNames'),
 		preserveSymlinks: getInputOption('preserveSymlinks')
 	};
 

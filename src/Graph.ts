@@ -38,8 +38,10 @@ export type ResolveDynamicImportHandler = (
 ) => Promise<string | void>;
 
 function generateChunkName(
+	chunk: Chunk,
 	id: string,
 	chunkNames: { [name: string]: boolean },
+	useContentHash = false,
 	startAtTwo = false
 ): string {
 	let name = path.basename(id);
@@ -50,8 +52,12 @@ function generateChunkName(
 		ext = '.js';
 	}
 	let uniqueName = name;
-	let uniqueIndex = startAtTwo ? 2 : 1;
-	while (chunkNames[uniqueName]) uniqueName = name + uniqueIndex++;
+	if (useContentHash) {
+		uniqueName += '-' + chunk.generateContentHash();
+	} else {
+		let uniqueIndex = startAtTwo ? 2 : 1;
+		while (chunkNames[uniqueName]) uniqueName = name + uniqueIndex++;
+	}
 	chunkNames[uniqueName] = true;
 	return uniqueName + ext;
 }
@@ -80,6 +86,7 @@ export default class Graph {
 	treeshakingOptions: TreeshakingOptions;
 	varOrConst: 'var' | 'const';
 	private aggressivelyMergeModules: boolean;
+	private hashedChunkNames: boolean;
 
 	// deprecated
 	treeshake: boolean;
@@ -186,6 +193,7 @@ export default class Graph {
 		this.varOrConst = options.preferConst ? 'const' : 'var';
 		this.legacy = options.legacy;
 		this.aggressivelyMergeModules = options.aggressivelyMergeModules === true;
+		this.hashedChunkNames = options.hashedChunkNames === true;
 
 		this.acornOptions = options.acorn || {};
 		const acornPluginsToInject = [];
@@ -402,7 +410,13 @@ export default class Graph {
 				chunkList.forEach(chunk => {
 					// generate the imports and exports for the output chunk file
 					if (chunk.entryModule) {
-						const entryName = generateChunkName(chunk.entryModule.id, chunkNames, true);
+						const entryName = generateChunkName(
+							chunk,
+							chunk.entryModule.id,
+							chunkNames,
+							this.hashedChunkNames && dynamicImports.indexOf(chunk.entryModule) !== -1,
+							true
+						);
 
 						// if the chunk exactly exports the entry point exports then
 						// it can replace the entry point
@@ -422,7 +436,7 @@ export default class Graph {
 						}
 					}
 					// name the chunk itself
-					const chunkName = generateChunkName('chunk', chunkNames);
+					const chunkName = generateChunkName(chunk, 'chunk', chunkNames, this.hashedChunkNames);
 					chunk.setId('./' + chunkName);
 					chunks['./' + chunkName] = chunk;
 				});

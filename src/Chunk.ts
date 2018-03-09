@@ -24,6 +24,7 @@ import { makeLegal } from './utils/identifierHelpers';
 import LocalVariable from './ast/variables/LocalVariable';
 import { NodeType } from './ast/nodes/index';
 import { RenderOptions } from './utils/renderHelpers';
+import MurmurHash3 from 'imurmurhash';
 
 export interface ModuleDeclarations {
 	exports: ChunkExports;
@@ -160,6 +161,12 @@ export default class Chunk {
 		}
 
 		return safeExportName;
+	}
+
+	generateContentHash() {
+		const hash = new MurmurHash3();
+		this.orderedModules.forEach(module => hash.hash(module.originalCode));
+		return hash.result();
 	}
 
 	generateEntryExports(entryModule: Module) {
