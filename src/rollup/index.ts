@@ -16,6 +16,9 @@ import { WatcherOptions } from '../watch/index';
 import { Deprecation } from '../utils/deprecateOptions';
 import Graph from '../Graph';
 import { TransformContext } from '../utils/transform';
+import { Finaliser } from '../finalisers';
+export { default as Chunk } from '../Chunk';
+export { default as getExportBlock } from '../finalisers/shared/getExportBlock';
 
 export const VERSION = '<@VERSION@>';
 
@@ -127,7 +130,7 @@ export interface OutputOptions {
 	dir?: string;
 	// this is optional at the base-level of RollupWatchOptions,
 	// which extends from this interface through config merge
-	format?: ModuleFormat;
+	format?: ModuleFormat | Finaliser;
 	name?: string;
 	globals?: GlobalsOption;
 
