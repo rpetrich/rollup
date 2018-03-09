@@ -1,4 +1,10 @@
-import { timeStart, timeEnd, flushTime } from '../utils/flushTime';
+import {
+	getTimings,
+	initialiseTimers,
+	SerializedTimings,
+	timeEnd,
+	timeStart
+} from '../utils/timers';
 import { basename } from '../utils/path';
 import { writeFile } from '../utils/fs';
 import { assign } from '../utils/object';
@@ -107,6 +113,7 @@ export interface InputOptions {
 	// undocumented?
 	pureExternalModules?: boolean;
 	preferConst?: boolean;
+	perf?: boolean;
 
 	// deprecated
 	entry?: string;
@@ -240,6 +247,7 @@ export interface OutputChunk {
 
 	generate: (outputOptions: OutputOptions) => Promise<{ code: string; map: SourceMap }>;
 	write: (options: OutputOptions) => Promise<void>;
+	getTimings?: () => SerializedTimings;
 }
 
 export default function rollup(rawInputOptions: InputOptions): Promise<OutputChunk>;
@@ -259,14 +267,15 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 		checkInputOptions(inputOptions);
 		const graph = new Graph(inputOptions);
 
-		timeStart('--BUILD--');
+		initialiseTimers(inputOptions.perf);
+		timeStart('# BUILD');
 
 		const codeSplitting =
 			inputOptions.experimentalCodeSplitting && inputOptions.input instanceof Array;
 
 		if (!codeSplitting)
 			return graph.buildSingle(inputOptions.input).then(chunk => {
-				timeEnd('--BUILD--');
+				timeEnd('# BUILD');
 
 				function normalizeOptions(rawOutputOptions: GenericConfigObject) {
 					if (!rawOutputOptions) {
@@ -311,12 +320,12 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 				function generate(rawOutputOptions: GenericConfigObject) {
 					const outputOptions = normalizeOptions(rawOutputOptions);
 
-					timeStart('--GENERATE--');
+					timeStart('# GENERATE');
 
 					const promise = Promise.resolve()
 						.then(() => chunk.render(outputOptions))
 						.then(rendered => {
-							timeEnd('--GENERATE--');
+							timeEnd('# GENERATE');
 
 							graph.plugins.forEach(plugin => {
 								if (plugin.ongenerate) {
@@ -331,8 +340,6 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 									);
 								}
 							});
-
-							flushTime();
 
 							return rendered;
 						});
@@ -379,30 +386,30 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 							promises.push(writeFile(file, code));
 							return (
 								Promise.all(promises)
-									.then(() => {
-										return mapSequence(
-											graph.plugins.filter(plugin => plugin.onwrite),
-											(plugin: Plugin) => {
-												return Promise.resolve(
-													plugin.onwrite(
-														assign(
-															{
-																bundle: result
-															},
-															outputOptions
-														),
-														result
-													)
-												);
-											}
-										);
-									})
+									.then(() =>
+										mapSequence(graph.plugins.filter(plugin => plugin.onwrite), (plugin: Plugin) =>
+											Promise.resolve(
+												plugin.onwrite(
+													assign(
+														{
+															bundle: result
+														},
+														outputOptions
+													),
+													result
+												)
+											)
+										)
+									)
 									// ensures return isn't void[]
 									.then(() => {})
 							);
 						});
 					}
 				};
+				if (inputOptions.perf === true) {
+					result.getTimings = getTimings;
+				}
 
 				return result;
 			});
@@ -444,7 +451,7 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 					});
 				}
 
-				timeStart('--GENERATE--');
+				timeStart('# GENERATE');
 
 				const generated: { [chunkName: string]: SourceDescription } = {};
 
@@ -452,7 +459,7 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 					Object.keys(bundle).map(chunkName => {
 						const chunk = bundle[chunkName];
 						return chunk.render(outputOptions).then(rendered => {
-							timeEnd('--GENERATE--');
+							timeEnd('# GENERATE');
 
 							graph.plugins.forEach(plugin => {
 								if (plugin.ongenerate) {
@@ -461,14 +468,10 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 								}
 							});
 
-							flushTime();
-
 							generated[chunkName] = rendered;
 						});
 					})
-				).then(() => {
-					return generated;
-				});
+				).then(() => generated);
 
 				Object.defineProperty(promise, 'code', throwAsyncGenerateError);
 				Object.defineProperty(promise, 'map', throwAsyncGenerateError);
@@ -513,15 +516,15 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 								promises.push(writeFile(dir + '/' + chunkName, code));
 								return (
 									Promise.all(promises)
-										.then(() => {
-											return mapSequence(
+										.then(() =>
+											mapSequence(
 												graph.plugins.filter(plugin => plugin.onwrite),
 												(plugin: Plugin) =>
 													Promise.resolve(
 														plugin.onwrite(assign({ bundle: chunk }, outputOptions), chunk)
 													)
-											);
-										})
+											)
+										)
 										// ensures return isn't void[]
 										.then(() => {})
 								);
