@@ -48,7 +48,7 @@
     "url": "https://github.com/rollup/rollup/issues"
   },
   "homepage": "https://github.com/rollup/rollup",
-  "devDependencies": {
+  "dependencies": {
     "@types/acorn": "^4.0.3",
     "@types/chokidar": "^1.7.5",
     "@types/minimist": "^1.2.0",
