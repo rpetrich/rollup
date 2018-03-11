@@ -1,32 +1,10 @@
-import system from './system';
-import amd from './amd';
-import cjs from './cjs';
-import es from './es';
-import iife from './iife';
-import umd from './umd';
-import Chunk from '../Chunk';
-import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/index';
-
-export type Finaliser = (
-	chunk: Chunk,
-	magicString: MagicStringBundle,
-	{
-		exportMode,
-		getPath,
-		indentString,
-		intro,
-		outro
-	}: {
-		exportMode: string;
-		indentString: string;
-		getPath: (name: string) => string;
-		intro: string;
-		outro: string;
-		dynamicImport: boolean;
-	},
-	options: OutputOptions
-) => MagicStringBundle;
+import * as system from './system';
+import * as amd from './amd';
+import * as cjs from './cjs';
+import * as es from './es';
+import * as iife from './iife';
+import * as umd from './umd';
+import { Finaliser } from '../rollup/index';
 
 export default { system, amd, cjs, es, iife, umd } as {
 	[format: string]: Finaliser;

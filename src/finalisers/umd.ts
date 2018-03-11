@@ -26,7 +26,7 @@ function safeAccess(name: string) {
 
 const wrapperOutro = '\n\n})));';
 
-export default function umd(
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{

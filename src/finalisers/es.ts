@@ -1,7 +1,9 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
 import Chunk from '../Chunk';
 
-export default function es(
+export const usesUnqualifiedNames = true;
+
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{

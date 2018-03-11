@@ -1,6 +1,15 @@
 import Chunk, { ModuleDeclarations } from '../Chunk';
 import { Bundle as MagicStringBundle } from 'magic-string';
 
+export const dynamicImportMechanism = {
+	left: 'module.import(',
+	right: ')'
+};
+
+export const usesUnqualifiedNames = true;
+
+export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
+
 function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	const starExcludes = new Set(exports.map(expt => expt.exported));
 	if (!starExcludes.has('default')) starExcludes.add('default');
@@ -15,7 +24,7 @@ function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	return starExcludes;
 }
 
-export default function system(
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{

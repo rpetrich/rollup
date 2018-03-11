@@ -4,7 +4,14 @@ import { Bundle as MagicStringBundle } from 'magic-string';
 import Chunk from '../Chunk';
 import getExportBlock from './shared/getExportBlock';
 
-export default function cjs(
+export const dynamicImportMechanism = {
+	left: 'Promise.resolve(require(',
+	right: '))',
+	interopLeft: 'Promise.resolve({ default: require(',
+	interopRight: ') })'
+};
+
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{

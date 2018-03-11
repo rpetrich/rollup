@@ -1,6 +1,6 @@
 import { Node } from '../ast/nodes/shared/Node';
 import MagicString from 'magic-string';
-import { DynamicImportMechanism } from '../Chunk';
+import { DynamicImportMechanism } from '../rollup/index';
 
 export interface RenderOptions {
 	legacy: boolean;

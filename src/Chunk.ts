@@ -12,7 +12,7 @@ import collapseSourcemaps from './utils/collapseSourcemaps';
 import callIfFunction from './utils/callIfFunction';
 import error from './utils/error';
 import { normalize, resolve } from './utils/path';
-import { OutputOptions } from './rollup/index';
+import { DynamicImportMechanism, Finaliser, OutputOptions } from './rollup/index';
 import { RawSourceMap } from 'source-map';
 import Graph from './Graph';
 import ExternalModule from './ExternalModule';
@@ -59,13 +59,6 @@ export interface ReexportSpecifier {
 export interface ImportSpecifier {
 	local: string;
 	imported: string;
-}
-
-export interface DynamicImportMechanism {
-	left: string;
-	right: string;
-	interopLeft?: string;
-	interopRight?: string;
 }
 
 export default class Chunk {
@@ -422,32 +415,9 @@ export default class Chunk {
 		).then(addons => addons.filter(Boolean).join(sep));
 	}
 
-	private setDynamicImportResolutions({ format }: OutputOptions) {
-		const es = format === 'es';
-		let dynamicImportMechanism: DynamicImportMechanism;
+	private setDynamicImportResolutions(finaliser: Finaliser) {
+		let dynamicImportMechanism: DynamicImportMechanism = finaliser.dynamicImportMechanism;
 		let hasDynamicImports = false;
-		if (!es) {
-			if (format === 'cjs') {
-				dynamicImportMechanism = {
-					left: 'Promise.resolve(require(',
-					right: '))',
-					interopLeft: 'Promise.resolve({ default: require(',
-					interopRight: ') })'
-				};
-			} else if (format === 'amd') {
-				dynamicImportMechanism = {
-					left: 'new Promise(function (resolve, reject) { require([',
-					right: '], resolve, reject) })',
-					interopLeft: 'new Promise(function (resolve, reject) { require([',
-					interopRight: '], function (m) { resolve({ default: m }) }, reject) })'
-				};
-			} else if (format === 'system') {
-				dynamicImportMechanism = {
-					left: 'module.import(',
-					right: ')'
-				};
-			}
-		}
 		this.orderedModules.forEach(module => {
 			module.dynamicImportResolutions.forEach((replacement, index) => {
 				const node = module.dynamicImports[index];
@@ -476,9 +446,9 @@ export default class Chunk {
 		if (hasDynamicImports) return dynamicImportMechanism;
 	}
 
-	private setIdentifierRenderResolutions(options: OutputOptions) {
+	private setIdentifierRenderResolutions(finaliser: Finaliser) {
 		const used = blank();
-		const es = options.format === 'es' || options.format === 'system';
+		const usesUnqualifiedNames = !!finaliser.usesUnqualifiedNames;
 
 		// ensure no conflicts with globals
 		Object.keys(this.graph.scope.variables).forEach(name => (used[name] = 1));
@@ -493,13 +463,15 @@ export default class Chunk {
 		}
 
 		// reserved internal binding names for system format wiring
-		if (options.format === 'system') {
-			used['_setter'] = used['_starExcludes'] = used['_$p'] = 1;
+		if (finaliser.reservedIdentifiers) {
+			for (let identifier of finaliser.reservedIdentifiers) {
+				used[identifier] = 1;
+			}
 		}
 
 		const toDeshadow: Set<string> = new Set();
 
-		if (!es) {
+		if (!usesUnqualifiedNames) {
 			this.dependencies.forEach(module => {
 				if ((<ExternalModule>module).isExternal) {
 					const safeName = getSafeName(module.name);
@@ -516,19 +488,19 @@ export default class Chunk {
 					if (variable.name === '*') {
 						safeName = module.name;
 					} else if (variable.name === 'default') {
-						if (module.exportsNamespace || (!es && module.exportsNames)) {
+						if (module.exportsNamespace || (!usesUnqualifiedNames && module.exportsNames)) {
 							safeName = `${module.name}__default`;
 						} else {
 							safeName = module.name;
 						}
 					} else {
-						safeName = es ? variable.name : `${module.name}.${name}`;
+						safeName = usesUnqualifiedNames ? variable.name : `${module.name}.${name}`;
 					}
-					if (es) {
+					if (usesUnqualifiedNames) {
 						safeName = getSafeName(safeName);
 						toDeshadow.add(safeName);
 					}
-				} else if (es) {
+				} else if (usesUnqualifiedNames) {
 					safeName = getSafeName(variable.name);
 				} else {
 					safeName = `${(<Module>module).chunk.name}.${name}`;
@@ -545,7 +517,7 @@ export default class Chunk {
 				}
 				if (!variable.isDefault || !(<ExportDefaultVariable>variable).hasId) {
 					let safeName;
-					if (es || !variable.isReassigned || variable.isId) {
+					if (usesUnqualifiedNames || !variable.isReassigned || variable.isId) {
 						safeName = getSafeName(variable.name);
 					} else {
 						const safeExportName = this.exportedVariableNames.get(variable);
@@ -693,6 +665,17 @@ export default class Chunk {
 				]);
 			})
 			.then(([banner, footer, intro, outro]) => {
+				const finaliser =
+					typeof options.format === 'string' ? finalisers[options.format] : options.format;
+				if (!finaliser) {
+					error({
+						code: 'INVALID_OPTION',
+						message: `Invalid format: ${options.format} - valid options are ${Object.keys(
+							finalisers
+						).join(', ')}`
+					});
+				}
+
 				// Determine export mode - 'default', 'named', 'none'
 				const exportMode = this.isEntryModuleFacade ? getExportMode(this, options) : 'named';
 
@@ -705,10 +688,10 @@ export default class Chunk {
 					legacy: this.graph.legacy,
 					freeze: options.freeze !== false,
 					systemBindings: options.format === 'system',
-					importMechanism: this.graph.dynamicImport && this.setDynamicImportResolutions(options)
+					importMechanism: this.graph.dynamicImport && this.setDynamicImportResolutions(finaliser)
 				};
 
-				this.setIdentifierRenderResolutions(options);
+				this.setIdentifierRenderResolutions(finaliser);
 
 				this.orderedModules.forEach(module => {
 					const source = module.render(renderOptions);
@@ -730,17 +713,6 @@ export default class Chunk {
 
 				const indentString = getIndentString(magicString, options);
 
-				const finalise =
-					typeof options.format === 'function' ? options.format : finalisers[options.format];
-				if (!finalise) {
-					error({
-						code: 'INVALID_OPTION',
-						message: `Invalid format: ${options.format} - valid options are ${Object.keys(
-							finalisers
-						).join(', ')}`
-					});
-				}
-
 				timeStart('render format');
 
 				const getPath = this.createGetPath(options);
@@ -748,7 +720,7 @@ export default class Chunk {
 				if (intro) intro += '\n\n';
 				if (outro) outro = `\n\n${outro}`;
 
-				magicString = finalise(
+				magicString = finaliser.finalise(
 					this,
 					(<any>magicString).trim(), // TODO TypeScript: Awaiting MagicString PR
 					{

@@ -16,7 +16,8 @@ import { WatcherOptions } from '../watch/index';
 import { Deprecation } from '../utils/deprecateOptions';
 import Graph from '../Graph';
 import { TransformContext } from '../utils/transform';
-import { Finaliser } from '../finalisers';
+import Chunk from '../Chunk';
+import { Bundle as MagicStringBundle } from 'magic-string';
 export { default as Chunk } from '../Chunk';
 export { default as getExportBlock } from '../finalisers/shared/getExportBlock';
 
@@ -122,6 +123,38 @@ export interface InputOptions {
 }
 
 export type ModuleFormat = 'amd' | 'cjs' | 'system' | 'es' | 'es6' | 'iife' | 'umd';
+
+export interface DynamicImportMechanism {
+	left: string;
+	right: string;
+	interopLeft?: string;
+	interopRight?: string;
+}
+
+export interface Finaliser {
+	finalise(
+		chunk: Chunk,
+		magicString: MagicStringBundle,
+		{
+			exportMode,
+			getPath,
+			indentString,
+			intro,
+			outro
+		}: {
+			exportMode: string;
+			indentString: string;
+			getPath: (name: string) => string;
+			intro: string;
+			outro: string;
+			dynamicImport: boolean;
+		},
+		options: OutputOptions
+	): MagicStringBundle;
+	dynamicImportMechanism?: DynamicImportMechanism;
+	usesUnqualifiedNames?: boolean;
+	reservedIdentifiers?: string[];
+}
 
 export interface OutputOptions {
 	// only required for bundle.write

@@ -6,7 +6,14 @@ import Chunk from '../Chunk';
 import { Bundle as MagicStringBundle } from 'magic-string';
 import { OutputOptions } from '../rollup/index';
 
-export default function amd(
+export const dynamicImportMechanism = {
+	left: 'new Promise(function (resolve, reject) { require([',
+	right: '], resolve, reject) })',
+	interopLeft: 'new Promise(function (resolve, reject) { require([',
+	interopRight: '], function (m) { resolve({ default: m }) }, reject) })'
+};
+
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{

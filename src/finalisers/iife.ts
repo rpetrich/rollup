@@ -14,7 +14,7 @@ import { OutputOptions } from '../rollup/index';
 
 const thisProp = (name: string) => `this${keypath(name)}`;
 
-export default function iife(
+export function finalise(
 	chunk: Chunk,
 	magicString: MagicStringBundle,
 	{
