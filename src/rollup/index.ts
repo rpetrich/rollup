@@ -486,27 +486,31 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 
 				const generated: { [chunkName: string]: SourceDescription } = {};
 
-				const promise = Promise.all(
-					Object.keys(bundle).map(chunkName => {
-						const chunk = bundle[chunkName];
-						return chunk.render(outputOptions).then(rendered => {
-							timeEnd('--GENERATE--');
+				const promise = Object.keys(bundle)
+					.reduceRight(
+						(promise, chunkName) =>
+							promise.then(() => {
+								const chunk = bundle[chunkName];
+								return chunk.render(outputOptions).then(rendered => {
+									timeEnd('--GENERATE--');
 
-							graph.plugins.forEach(plugin => {
-								if (plugin.ongenerate) {
-									const bundle = chunks[chunkName];
-									plugin.ongenerate(assign({ bundle }, outputOptions), rendered);
-								}
-							});
+									graph.plugins.forEach(plugin => {
+										if (plugin.ongenerate) {
+											const bundle = chunks[chunkName];
+											plugin.ongenerate(assign({ bundle }, outputOptions), rendered);
+										}
+									});
 
-							flushTime();
+									flushTime();
 
-							generated[chunkName] = rendered;
-						});
-					})
-				).then(() => {
-					return generated;
-				});
+									generated[chunkName] = rendered;
+								});
+							}),
+						Promise.resolve()
+					)
+					.then(() => {
+						return generated;
+					});
 
 				Object.defineProperty(promise, 'code', throwAsyncGenerateError);
 				Object.defineProperty(promise, 'map', throwAsyncGenerateError);
