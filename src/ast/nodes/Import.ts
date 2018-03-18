@@ -41,11 +41,18 @@ export default class Import extends NodeBase {
 				code.overwrite(this.parent.start, this.parent.arguments[0].start, leftMechanism);
 			}
 
-			if (this.resolution) {
+			const original = code.slice(this.parent.arguments[0].start, this.parent.arguments[0].end);
+			const resolution = this.resolution ? this.resolution.toString() : original;
+			const afterReplacement =
+				(options.importMechanism &&
+					options.importMechanism.replacer &&
+					options.importMechanism.replacer(resolution, this.resolutionInterop)) ||
+				resolution;
+			if (original !== afterReplacement) {
 				code.overwrite(
 					this.parent.arguments[0].start,
 					this.parent.arguments[0].end,
-					this.resolution
+					afterReplacement
 				);
 			}
 

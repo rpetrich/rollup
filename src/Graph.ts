@@ -325,7 +325,7 @@ export default class Graph {
 		});
 	}
 
-	buildChunks(entryModuleIds: string[]): Promise<{ [name: string]: Chunk }> {
+	buildChunks(entryModuleIds: string[]): Promise<Chunk[]> {
 		// Phase 1 – discovery. We load the entry module and find which
 		// modules it imports, and import those, until we have all
 		// of the entry module's dependencies
@@ -402,9 +402,7 @@ export default class Graph {
 				});
 
 				// finally prepare output chunks
-				const chunks: {
-					[name: string]: Chunk;
-				} = {};
+				const chunks: Chunk[] = [];
 
 				// name the chunks
 				const chunkNames: { [name: string]: boolean } = blank();
@@ -423,8 +421,8 @@ export default class Graph {
 						// if the chunk exactly exports the entry point exports then
 						// it can replace the entry point
 						if (chunk.isEntryModuleFacade || this.aggressivelyMergeModules) {
-							chunks['./' + entryName] = chunk;
 							chunk.setId('./' + entryName);
+							chunks.push(chunk);
 							return;
 							// otherwise we create a special re-exporting entry point
 							// facade chunk with no modules
@@ -434,13 +432,13 @@ export default class Graph {
 							entryPointFacade.collectDependencies(chunk.entryModule);
 							entryPointFacade.generateImports();
 							entryPointFacade.generateEntryExports(chunk.entryModule);
-							chunks['./' + entryName] = entryPointFacade;
+							chunks.push(entryPointFacade);
 						}
 					}
 					// name the chunk itself
 					const chunkName = generateChunkName(chunk, 'chunk', chunkNames, this.hashedChunkNames);
 					chunk.setId('./' + chunkName);
-					chunks['./' + chunkName] = chunk;
+					chunks.push(chunk);
 				});
 
 				timeEnd('phase 4');

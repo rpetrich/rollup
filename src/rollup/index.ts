@@ -52,6 +52,9 @@ export type TransformHook = (
 	code: string,
 	id: String
 ) => Promise<SourceDescription | string | void>;
+export type BundledHook = (
+	chunks: { name: string; imports: string[]; exports: string[]; modules: ModuleJSON[] }[]
+) => Promise<void> | void;
 export type TransformBundleHook = (
 	code: string,
 	options: OutputOptions
@@ -68,6 +71,7 @@ export interface Plugin {
 	resolveId?: ResolveIdHook;
 	missingExport?: MissingExportHook;
 	transform?: TransformHook;
+	onbundled?: BundledHook;
 	transformBundle?: TransformBundleHook;
 	ongenerate?: (options: OutputOptions, source: SourceDescription) => void;
 	onwrite?: (options: OutputOptions, source: SourceDescription) => void;
@@ -130,6 +134,7 @@ export interface DynamicImportMechanism {
 	right: string;
 	interopLeft?: string;
 	interopRight?: string;
+	replacer?: (syntax: string, interop: boolean) => string | undefined;
 }
 
 export interface Finaliser {
@@ -447,24 +452,12 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 			});
 
 		return graph.buildChunks(inputOptions.input).then(bundle => {
-			const chunks: {
-				[name: string]: {
-					name: string;
-					imports: string[];
-					exports: string[];
-					modules: ModuleJSON[];
-				};
-			} = {};
-			Object.keys(bundle).forEach(chunkName => {
-				const chunk = bundle[chunkName];
-
-				chunks[chunkName] = {
-					name: chunkName,
-					imports: chunk.getImportIds(),
-					exports: chunk.getExportNames(),
-					modules: chunk.getJsonModules()
-				};
-			});
+			const chunks = bundle.map(chunk => ({
+				name: chunk.id,
+				imports: chunk.getImportIds(),
+				exports: chunk.getExportNames(),
+				modules: chunk.getJsonModules()
+			}));
 
 			function generate(rawOutputOptions: GenericConfigObject) {
 				const outputOptions = getAndCheckOutputOptions(inputOptions, rawOutputOptions);
@@ -487,27 +480,32 @@ export default function rollup(rawInputOptions: GenericConfigObject) {
 
 				const generated: { [chunkName: string]: SourceDescription } = {};
 
-				const promise = Object.keys(bundle)
+				const promise = bundle
 					.reduceRight(
-						(promise, chunkName) =>
+						(promise, chunk, index) =>
 							promise.then(() => {
-								const chunk = bundle[chunkName];
 								return chunk.render(outputOptions).then(rendered => {
 									timeEnd('--GENERATE--');
 
 									graph.plugins.forEach(plugin => {
 										if (plugin.ongenerate) {
-											const bundle = chunks[chunkName];
+											const bundle = chunks[index];
 											plugin.ongenerate(assign({ bundle }, outputOptions), rendered);
 										}
 									});
 
 									flushTime();
 
-									generated[chunkName] = rendered;
+									generated[chunk.id] = rendered;
 								});
 							}),
-						Promise.resolve()
+						graph.plugins.reduce((promise, plugin) => {
+							if (plugin.onbundled) {
+								return promise.then(() => plugin.onbundled(chunks));
+							} else {
+								return promise;
+							}
+						}, Promise.resolve())
 					)
 					.then(() => {
 						return generated;
