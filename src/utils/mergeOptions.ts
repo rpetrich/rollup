@@ -83,6 +83,7 @@ export default function mergeOptions({
 		experimentalCodeSplitting: getInputOption('experimentalCodeSplitting'),
 		aggressivelyMergeModules: getInputOption('aggressivelyMergeModules'),
 		hashedChunkNames: getInputOption('hashedChunkNames'),
+		minifyInternalNames: getInputOption('minifyInternalNames'),
 		preserveSymlinks: getInputOption('preserveSymlinks')
 	};
 

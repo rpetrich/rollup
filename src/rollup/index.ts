@@ -109,6 +109,7 @@ export interface InputOptions {
 	preserveSymlinks?: boolean;
 	aggressivelyMergeModules?: boolean;
 	hashedChunkNames?: boolean;
+	minifyInternalNames?: boolean;
 
 	// undocumented?
 	pureExternalModules?: boolean;

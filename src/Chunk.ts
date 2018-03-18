@@ -138,8 +138,8 @@ export default class Chunk {
 
 		let i = 0;
 		safeExportName = exportName;
-		while (this.exports[safeExportName]) {
-			safeExportName = exportName + '$' + ++i;
+		while (this.exports[safeExportName] || /^(\d|$)/.test(safeExportName)) {
+			safeExportName = exportName + (++i).toString(36);
 		}
 		variable.exportName = safeExportName;
 
@@ -256,7 +256,7 @@ export default class Chunk {
 			exportName = tracedExport.module.chunk.ensureExport(
 				tracedExport.module,
 				variable,
-				tracedExport.name
+				this.graph.minifyInternalNames ? '' : tracedExport.name
 			);
 		} else {
 			importModule = tracedExport.module;

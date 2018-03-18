@@ -87,6 +87,7 @@ export default class Graph {
 	varOrConst: 'var' | 'const';
 	private aggressivelyMergeModules: boolean;
 	private hashedChunkNames: boolean;
+	minifyInternalNames: boolean;
 
 	// deprecated
 	treeshake: boolean;
@@ -194,6 +195,7 @@ export default class Graph {
 		this.legacy = options.legacy;
 		this.aggressivelyMergeModules = options.aggressivelyMergeModules === true;
 		this.hashedChunkNames = options.hashedChunkNames === true;
+		this.minifyInternalNames = options.minifyInternalNames === true;
 
 		this.acornOptions = options.acorn || {};
 		const acornPluginsToInject = [];
