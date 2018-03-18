@@ -138,9 +138,9 @@ export default class Chunk {
 		safeExportName = exportName === '*' ? variable.name : exportName;
 		if (safeExportName === '') {
 			let i = 9;
-			while (this.exports[safeExportName]) {
+			do {
 				safeExportName = exportName + (++i).toString(36);
-			}
+			} while (this.exports[safeExportName]);
 		} else {
 			let i = 0;
 			while (this.exports[safeExportName]) {
