@@ -1,6 +1,5 @@
-import { timeEnd, timeStart } from './utils/flushTime';
-import { decode } from 'sourcemap-codec';
-import { Bundle as MagicStringBundle } from 'magic-string';
+import { timeEnd, timeStart } from './utils/timers';
+import MagicString, { Bundle as MagicStringBundle, SourceMap } from 'magic-string';
 import { blank, forOwn } from './utils/object';
 import Module, { ModuleJSON } from './Module';
 import finalisers from './finalisers/index';
@@ -16,7 +15,7 @@ import { DynamicImportMechanism, Finaliser, OutputOptions } from './rollup/index
 import { RawSourceMap } from 'source-map';
 import Graph from './Graph';
 import ExternalModule from './ExternalModule';
-import ExportDefaultVariable from './ast/variables/ExportDefaultVariable';
+import { isExportDefaultVariable } from './ast/variables/ExportDefaultVariable';
 import Variable from './ast/variables/Variable';
 import NamespaceVariable from './ast/variables/NamespaceVariable';
 import ExternalVariable from './ast/variables/ExternalVariable';
@@ -136,10 +135,17 @@ export default class Chunk {
 			return safeExportName;
 		}
 
-		let i = 0;
-		safeExportName = exportName;
-		while (this.exports[safeExportName] || /^(\d|$)/.test(safeExportName)) {
-			safeExportName = exportName + (++i).toString(36);
+		safeExportName = exportName === '*' ? variable.name : exportName;
+		if (safeExportName === '') {
+			let i = 9;
+			while (this.exports[safeExportName]) {
+				safeExportName = exportName + (++i).toString(36);
+			}
+		} else {
+			let i = 0;
+			while (this.exports[safeExportName]) {
+				safeExportName = exportName + '$' + ++i;
+			}
 		}
 		variable.exportName = safeExportName;
 
@@ -162,10 +168,13 @@ export default class Chunk {
 		return hash.result();
 	}
 
-	generateEntryExports(entryModule: Module) {
+	generateEntryExports(entryModule: Module, onlyIncluded: boolean = false) {
 		entryModule.getAllExports().forEach(exportName => {
 			const traced = this.traceExport(entryModule, exportName);
 			const variable = traced.module.traceExport(traced.name);
+			if (onlyIncluded && !variable.included) {
+				return;
+			}
 			let tracedName: string;
 			if (traced.module.chunk === this || traced.module.isExternal) {
 				tracedName = traced.name;
@@ -304,6 +313,7 @@ export default class Chunk {
 
 		// namespace variable can indicate multiple imports
 		if (tracedExport.name === '*') {
+			this.populateImport(variable, tracedExport);
 			Object.keys(
 				(<NamespaceVariable>variable).originals || (<ExternalVariable>variable).module.declarations
 			).forEach(importName => {
@@ -511,11 +521,11 @@ export default class Chunk {
 
 		this.orderedModules.forEach(module => {
 			forOwn(module.scope.variables, variable => {
-				if (variable.isDefault && (<ExportDefaultVariable>variable).referencesOriginal()) {
+				if (isExportDefaultVariable(variable) && variable.referencesOriginal()) {
 					variable.setSafeName(null);
 					return;
 				}
-				if (!variable.isDefault || !(<ExportDefaultVariable>variable).hasId) {
+				if (!(isExportDefaultVariable(variable) && variable.hasId)) {
 					let safeName;
 					if (usesUnqualifiedNames || !variable.isReassigned || variable.isId) {
 						safeName = getSafeName(variable.name);
@@ -534,7 +544,7 @@ export default class Chunk {
 			// deconflict reified namespaces
 			const namespace = module.namespace();
 			if (namespace.needsNamespaceBlock) {
-				namespace.name = getSafeName(namespace.name);
+				namespace.setSafeName(getSafeName(namespace.name));
 			}
 		});
 
@@ -638,9 +648,11 @@ export default class Chunk {
 				});
 			}
 
+			const localName = expt.variable.getName();
+
 			exports.push({
-				local: expt.variable.getName(),
-				exported: name,
+				local: localName,
+				exported: name === '*' ? localName : name,
 				hoisted
 			});
 		}
@@ -682,36 +694,50 @@ export default class Chunk {
 				let magicString = new MagicStringBundle({ separator: '\n\n' });
 				const usedModules: Module[] = [];
 
-				timeStart('render modules');
+				timeStart('render modules', 3);
+
+				const indentString = getIndentString(this.orderedModules, options);
 
 				const renderOptions: RenderOptions = {
-					legacy: this.graph.legacy,
+					legacy: options.legacy,
 					freeze: options.freeze !== false,
+					namespaceToStringTag: options.namespaceToStringTag === true,
+					indent: indentString,
 					systemBindings: options.format === 'system',
 					importMechanism: this.graph.dynamicImport && this.setDynamicImportResolutions(finaliser)
 				};
 
 				this.setIdentifierRenderResolutions(finaliser);
 
+				let hoistedSource = '';
+
 				this.orderedModules.forEach(module => {
 					const source = module.render(renderOptions);
+					(<any>source).trim();
 
-					if (source.toString().length) {
+					const namespace = module.namespace();
+					if (namespace.needsNamespaceBlock || source.toString().length) {
 						magicString.addSource(source);
 						usedModules.push(module);
+
+						if (namespace.needsNamespaceBlock) {
+							const rendered = namespace.renderBlock(renderOptions);
+							if (namespace.renderFirst()) hoistedSource += '\n' + rendered;
+							else magicString.addSource(new MagicString(rendered));
+						}
 					}
 				});
 
-				if (!magicString.toString().trim() && this.getExportNames().length === 0) {
+				if (hoistedSource) magicString.prepend(hoistedSource + '\n\n');
+
+				if (this.getExportNames().length === 0 && !magicString.toString().trim()) {
 					this.graph.warn({
 						code: 'EMPTY_BUNDLE',
 						message: 'Generated an empty bundle'
 					});
 				}
 
-				timeEnd('render modules');
-
-				const indentString = getIndentString(magicString, options);
+				timeEnd('render modules', 3);
 
 				timeStart('render format');
 
@@ -722,7 +748,7 @@ export default class Chunk {
 
 				magicString = finaliser.finalise(
 					this,
-					(<any>magicString).trim(), // TODO TypeScript: Awaiting MagicString PR
+					magicString.trim(),
 					{
 						exportMode,
 						getPath,
@@ -734,19 +760,20 @@ export default class Chunk {
 					options
 				);
 
-				timeEnd('render format');
+				timeEnd('render format', 3);
 
 				if (banner) magicString.prepend(banner + '\n');
-				if (footer) (<any>magicString).append('\n' + footer); // TODO TypeScript: Awaiting MagicString PR
+				if (footer) magicString.append('\n' + footer);
 
 				const prevCode = magicString.toString();
-				let map: RawSourceMap = null;
 				const bundleSourcemapChain: RawSourceMap[] = [];
 
 				return transformBundle(prevCode, this.graph.plugins, bundleSourcemapChain, options).then(
 					(code: string) => {
+						let map: SourceMap;
+
 						if (options.sourcemap) {
-							timeStart('sourcemap');
+							timeStart('sourcemap', 3);
 
 							let file = options.file ? options.sourcemapFile || options.file : this.id;
 							if (file) file = resolve(typeof process !== 'undefined' ? process.cwd() : '', file);
@@ -757,22 +784,19 @@ export default class Chunk {
 									Boolean(plugin.transform || plugin.transformBundle)
 								)
 							) {
-								map = <any>magicString.generateMap({}); // TODO TypeScript: Awaiting missing version in SourceMap type
-								if (typeof map.mappings === 'string') {
-									map.mappings = decode(map.mappings);
-								}
-								map = collapseSourcemaps(this, file, map, usedModules, bundleSourcemapChain);
+								let decodedMap = magicString.generateDecodedMap({});
+								map = collapseSourcemaps(this, file, decodedMap, usedModules, bundleSourcemapChain);
 							} else {
-								map = <any>magicString.generateMap({ file, includeContent: true }); // TODO TypeScript: Awaiting missing version in SourceMap type
+								map = magicString.generateMap({ file, includeContent: true });
 							}
 
 							map.sources = map.sources.map(normalize);
 
-							timeEnd('sourcemap');
+							timeEnd('sourcemap', 3);
 						}
 
 						if (code[code.length - 1] !== '\n') code += '\n';
-						return { code, map } as { code: string; map: any }; // TODO TypeScript: Awaiting missing version in SourceMap type
+						return { code, map };
 					}
 				);
 			});

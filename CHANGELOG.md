@@ -1,5 +1,26 @@
 # rollup changelog
 
+## 0.57.1
+* Improve sourcemap generation performance ([#2062](https://github.com/rollup/rollup/pull/2062))
+* Add reserved config option namespace and improve CLI interface ([#2063](https://github.com/rollup/rollup/pull/2063))
+* Fix issue with default exported function and class expressions ([#2059](https://github.com/rollup/rollup/pull/2059))
+* Replace `forEach` with faster `for` loops in some places ([#2064](https://github.com/rollup/rollup/pull/2064))
+
+## 0.57.0
+* Add option to preserve the module structure instead of bundling ([#1922](https://github.com/rollup/rollup/pull/1922))
+* Enable watch mode when code-splitting ([#2035](https://github.com/rollup/rollup/pull/2035))
+* Optionally pass CLI commands to config file ([#1926](https://github.com/rollup/rollup/pull/1926))
+* Option to add correct `.toString` tags to namespaces ([#2041](https://github.com/rollup/rollup/pull/2041))
+* Option and scripts to display performance timings ([#2045](https://github.com/rollup/rollup/pull/2045))
+* Fixes for exported or early accessed namespaces + improved namespace indentation ([#2041](https://github.com/rollup/rollup/pull/2041))
+* Include missing TypeScript dependencies ([#1965](https://github.com/rollup/rollup/pull/1965))
+* Add #_PURE annotation to frozen namespaces ([#2044](https://github.com/rollup/rollup/pull/2044))
+* Improve sourcemap and tree-shaking performance ([#2052](https://github.com/rollup/rollup/pull/2052))
+* Inline sourcemap lookups and make rollup smaller ([#2055](https://github.com/rollup/rollup/pull/2055))
+* Use updated magic-string types ([#2057](https://github.com/rollup/rollup/pull/2057))
+* [BREAKING] Revert class id preservation from #2025 ([#2048](https://github.com/rollup/rollup/pull/2048))
+* [BREAKING] Refactor missing export plugin hook ([#1987](https://github.com/rollup/rollup/pull/1987))
+
 ## 0.56.5
 * Preserve ids when deconflicting classes ([#2025](https://github.com/rollup/rollup/pull/2025))
 * Fix an issue with re-exported namespace imports ([#2034](https://github.com/rollup/rollup/pull/2034))

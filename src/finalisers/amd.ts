@@ -66,12 +66,12 @@ export function finalise(
 	if (intro) magicString.prepend(intro);
 
 	const exportBlock = getExportBlock(exports, dependencies, exportMode);
-	if (exportBlock) (<any>magicString).append('\n\n' + exportBlock); // TODO TypeScript: Awaiting PR
+	if (exportBlock) magicString.append('\n\n' + exportBlock);
 	if (exportMode === 'named' && options.legacy !== true && chunk.isEntryModuleFacade)
-		(<any>magicString).append(`\n\n${esModuleExport}`); // TODO TypeScript: Awaiting PR
-	if (outro) (<any>magicString).append(outro);
+		magicString.append(`\n\n${esModuleExport}`);
+	if (outro) magicString.append(outro);
 
-	return (<any>magicString) // TODO TypeScript: Awaiting PR
+	return magicString
 		.indent(indentString)
 		.append('\n\n});')
 		.prepend(wrapperStart);

@@ -1,7 +1,7 @@
 import { IParse, Options as AcornOptions } from 'acorn';
 import MagicString from 'magic-string';
 import { locate } from 'locate-character';
-import { timeEnd, timeStart } from './utils/flushTime';
+import { timeEnd, timeStart } from './utils/timers';
 import { blank } from './utils/object';
 import { basename, extname } from './utils/path';
 import { makeLegal } from './utils/identifierHelpers';
@@ -13,13 +13,11 @@ import extractNames from './ast/utils/extractNames';
 import enhance from './ast/enhance';
 import clone from './ast/clone';
 import ModuleScope from './ast/scopes/ModuleScope';
-import { encode } from 'sourcemap-codec';
-import { RawSourceMap, SourceMapConsumer } from 'source-map';
+import { RawSourceMap } from 'source-map';
 import ImportSpecifier from './ast/nodes/ImportSpecifier';
 import Graph from './Graph';
 import Variable from './ast/variables/Variable';
 import Program from './ast/nodes/Program';
-import VariableDeclarator from './ast/nodes/VariableDeclarator';
 import { Node } from './ast/nodes/shared/Node';
 import ExportNamedDeclaration from './ast/nodes/ExportNamedDeclaration';
 import ImportDeclaration from './ast/nodes/ImportDeclaration';
@@ -210,7 +208,7 @@ export default class Module {
 		this.originalSourcemap = originalSourcemap;
 		this.sourcemapChain = sourcemapChain;
 
-		timeStart('ast');
+		timeStart('generate ast', 3);
 
 		if (ast) {
 			// prevent mutating the provided AST, as it may be reused on
@@ -223,7 +221,7 @@ export default class Module {
 			this.astClone = clone(this.ast);
 		}
 
-		timeEnd('ast');
+		timeEnd('generate ast', 3);
 
 		this.resolvedIds = resolvedIds || blank();
 
@@ -235,19 +233,19 @@ export default class Module {
 		});
 		this.removeExistingSourceMap();
 
-		timeStart('analyse');
+		timeStart('analyse ast', 3);
 
 		this.analyse();
 
-		timeEnd('analyse');
+		timeEnd('analyse ast', 3);
 	}
 
 	private removeExistingSourceMap() {
-		this.comments.forEach(comment => {
+		for (const comment of this.comments) {
 			if (!comment.block && SOURCEMAPPING_URL_RE.test(comment.text)) {
 				this.magicString.remove(comment.start, comment.end);
 			}
-		});
+		}
 	}
 
 	private addExport(
@@ -264,7 +262,7 @@ export default class Module {
 				// When an unknown import is encountered, we see if one of them can satisfy it.
 				this.exportAllSources.push(source);
 			} else {
-				(<ExportNamedDeclaration>node).specifiers.forEach(specifier => {
+				for (const specifier of (<ExportNamedDeclaration>node).specifiers) {
 					const name = specifier.exported.name;
 
 					if (this.exports[name] || this.reexports[name]) {
@@ -283,7 +281,7 @@ export default class Module {
 						localName: specifier.local.name,
 						module: null // filled in later
 					};
-				});
+				}
 			}
 		} else if (node.type === NodeType.ExportDefaultDeclaration) {
 			// export default function foo () {}
@@ -315,11 +313,11 @@ export default class Module {
 			const declaration = (<ExportNamedDeclaration>node).declaration;
 
 			if (declaration.type === NodeType.VariableDeclaration) {
-				declaration.declarations.forEach((decl: VariableDeclarator) => {
-					extractNames(decl.id).forEach(localName => {
+				for (const decl of declaration.declarations) {
+					for (const localName of extractNames(decl.id)) {
 						this.exports[localName] = { localName };
-					});
-				});
+					}
+				}
 			} else {
 				// export function foo () {}
 				const localName = declaration.id.name;
@@ -327,7 +325,7 @@ export default class Module {
 			}
 		} else {
 			// export { foo, bar, baz }
-			(<ExportNamedDeclaration>node).specifiers.forEach(specifier => {
+			for (const specifier of (<ExportNamedDeclaration>node).specifiers) {
 				const localName = specifier.local.name;
 				const exportedName = specifier.exported.name;
 
@@ -342,7 +340,7 @@ export default class Module {
 				}
 
 				this.exports[exportedName] = { localName };
-			});
+			}
 		}
 	}
 
@@ -351,7 +349,7 @@ export default class Module {
 
 		if (this.sources.indexOf(source) === -1) this.sources.push(source);
 
-		node.specifiers.forEach(specifier => {
+		for (const specifier of node.specifiers) {
 			const localName = specifier.local.name;
 
 			if (this.imports[localName]) {
@@ -371,12 +369,12 @@ export default class Module {
 				? 'default'
 				: isNamespace ? '*' : (<ImportSpecifier>specifier).imported.name;
 			this.imports[localName] = { source, specifier, name, module: null };
-		});
+		}
 	}
 
 	private analyse() {
 		enhance(this.ast, this, this.dynamicImports);
-		this.ast.body.forEach(node => {
+		for (const node of this.ast.body) {
 			if ((<ImportDeclaration>node).isImportDeclaration) {
 				this.addImport(<ImportDeclaration>node);
 			} else if (
@@ -388,7 +386,7 @@ export default class Module {
 					| ExportNamedDeclaration
 					| ExportAllDeclaration>node);
 			}
-		});
+		}
 	}
 
 	basename() {
@@ -399,18 +397,18 @@ export default class Module {
 	}
 
 	markExports() {
-		this.getExports().forEach(name => {
-			const variable = this.traceExport(name);
+		for (const exportName of this.getExports()) {
+			const variable = this.traceExport(exportName);
 
-			variable.exportName = name;
+			variable.exportName = exportName;
 			variable.includeVariable();
 
 			if (variable.isNamespace) {
 				(<NamespaceVariable>variable).needsNamespaceBlock = true;
 			}
-		});
+		}
 
-		this.getReexports().forEach(name => {
+		for (const name of this.getReexports()) {
 			const variable = this.traceExport(name);
 
 			variable.exportName = name;
@@ -420,27 +418,32 @@ export default class Module {
 			} else {
 				variable.includeVariable();
 			}
-		});
+		}
 	}
 
 	linkDependencies() {
-		this.sources.forEach(source => {
+		for (let source of this.sources) {
 			const id = this.resolvedIds[source];
 
 			if (id) {
 				const module = this.graph.moduleById.get(id);
 				this.dependencies.push(<Module>module);
 			}
-		});
+		}
 
-		[this.imports, this.reexports].forEach(specifiers => {
-			Object.keys(specifiers).forEach(name => {
+		const resolveSpecifiers = (specifiers: {
+			[name: string]: ImportDescription | ReexportDescription;
+		}) => {
+			for (let name of Object.keys(specifiers)) {
 				const specifier = specifiers[name];
 
 				const id = this.resolvedIds[specifier.source];
 				specifier.module = this.graph.moduleById.get(id);
-			});
-		});
+			}
+		};
+
+		resolveSpecifiers(this.imports);
+		resolveSpecifiers(this.reexports);
 
 		this.exportAllModules = this.exportAllSources.map(source => {
 			const id = this.resolvedIds[source];
@@ -449,7 +452,9 @@ export default class Module {
 	}
 
 	bindReferences() {
-		this.ast.body.forEach(node => node.bind());
+		for (let node of this.ast.body) {
+			node.bind();
+		}
 	}
 
 	getDynamicImportExpressions(): (string | Node)[] {
@@ -471,24 +476,33 @@ export default class Module {
 
 	private getOriginalLocation(
 		sourcemapChain: RawSourceMap[],
-		location: { line: number; column: number }
+		location: { line: number; column: number; source?: string; name?: string }
 	) {
-		const filteredSourcemapChain = sourcemapChain
-			.filter(sourcemap => sourcemap.mappings)
-			.map(sourcemap => {
-				const encodedSourcemap = sourcemap;
-				if (sourcemap.mappings) {
-					encodedSourcemap.mappings = encode(encodedSourcemap.mappings);
-				}
-				return encodedSourcemap;
-			});
+		const filteredSourcemapChain = sourcemapChain.filter(sourcemap => sourcemap.mappings);
+
 		while (filteredSourcemapChain.length > 0) {
 			const sourcemap = filteredSourcemapChain.pop();
-			const smc = new SourceMapConsumer(sourcemap);
-			location = smc.originalPositionFor({
-				line: location.line,
-				column: location.column
-			});
+			const line: any = sourcemap.mappings[location.line - 1];
+			let locationFound = false;
+
+			if (line !== undefined) {
+				for (const segment of line) {
+					if (segment[0] >= location.column) {
+						if (segment.length < 4) break;
+						location = {
+							line: segment[2] + 1,
+							column: segment[3],
+							source: sourcemap.sources[segment[1]],
+							name: sourcemap.names[segment[4]]
+						};
+						locationFound = true;
+						break;
+					}
+				}
+			}
+			if (!locationFound) {
+				throw new Error("Can't resolve original location of error.");
+			}
 		}
 		return location;
 	}
@@ -536,9 +550,9 @@ export default class Module {
 				return;
 			}
 
-			(<Module>module).getAllExports().forEach(name => {
+			for (const name of (<Module>module).getAllExports()) {
 				if (name !== 'default') allExports[name] = true;
-			});
+			}
 		});
 
 		return Object.keys(allExports);
@@ -551,9 +565,9 @@ export default class Module {
 	getReexports() {
 		const reexports = blank();
 
-		Object.keys(this.reexports).forEach(name => {
+		for (const name in this.reexports) {
 			reexports[name] = true;
-		});
+		}
 
 		this.exportAllModules.forEach(module => {
 			if (module.isExternal) {
@@ -561,30 +575,29 @@ export default class Module {
 				return;
 			}
 
-			(<Module>module)
-				.getExports()
-				.concat((<Module>module).getReexports())
-				.forEach(name => {
-					if (name !== 'default') reexports[name] = true;
-				});
+			for (const name of (<Module>module).getExports().concat((<Module>module).getReexports())) {
+				if (name !== 'default') reexports[name] = true;
+			}
 		});
 
 		return Object.keys(reexports);
 	}
 
 	includeAllInBundle() {
-		this.ast.body.forEach(includeFully);
+		for (let node of this.ast.body) {
+			includeFully(node);
+		}
 	}
 
 	includeInBundle() {
 		let addedNewNodes = false;
-		this.ast.body.forEach((node: Node) => {
+		for (let node of this.ast.body) {
 			if (node.shouldBeIncluded()) {
 				if (node.includeInBundle()) {
 					addedNewNodes = true;
 				}
 			}
-		});
+		}
 		return addedNewNodes;
 	}
 
@@ -599,15 +612,7 @@ export default class Module {
 	render(options: RenderOptions): MagicString {
 		const magicString = this.magicString.clone();
 		this.ast.render(magicString, options);
-
-		if (this.namespace().needsNamespaceBlock) {
-			magicString.append(
-				'\n\n' + this.namespace().renderBlock(options.legacy, options.freeze, '\t')
-			); // TODO use correct indentation
-		}
-
-		// TODO TypeScript: It seems magicString is missing type information here
-		return (<any>magicString).trim();
+		return magicString;
 	}
 
 	toJSON(): ModuleJSON {
@@ -641,9 +646,9 @@ export default class Module {
 
 			if (!declaration) {
 				this.graph.handleMissingExport(
-					this,
 					importDeclaration.name,
-					otherModule,
+					this,
+					otherModule.id,
 					importDeclaration.specifier.start
 				);
 			}
@@ -673,9 +678,9 @@ export default class Module {
 
 			if (!declaration) {
 				this.graph.handleMissingExport(
-					this,
 					reexportDeclaration.localName,
-					reexportDeclaration.module,
+					this,
+					reexportDeclaration.module.id,
 					reexportDeclaration.start
 				);
 			}

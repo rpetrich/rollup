@@ -5,9 +5,10 @@ import { handleError, stderr } from '../logging';
 import relativeId from '../../../src/utils/relativeId';
 import { mapSequence } from '../../../src/utils/promise';
 import SOURCEMAPPING_URL from '../sourceMappingUrl';
-import { InputOptions, OutputOptions, OutputChunk } from '../../../src/rollup/index';
+import { InputOptions, OutputChunk, OutputOptions } from '../../../src/rollup/index';
 import { BatchWarnings } from './batchWarnings';
 import { SourceMap } from 'magic-string';
+import { printTimings } from './timings';
 
 export default function build(
 	inputOptions: InputOptions,
@@ -47,6 +48,7 @@ export default function build(
 				}
 
 				return bundle.generate(output).then(({ code, map }: { code: string; map: SourceMap }) => {
+					if (!code) return;
 					if (output.sourcemap === 'inline') {
 						code += `\n//# ${SOURCEMAPPING_URL}=${map.toUrl()}\n`;
 					}
@@ -55,11 +57,9 @@ export default function build(
 				});
 			}
 
-			return mapSequence(outputOptions, output => {
-				return bundle.write(output);
-			});
+			return mapSequence(outputOptions, output => bundle.write(output)).then(() => bundle);
 		})
-		.then(() => {
+		.then((bundle?: OutputChunk) => {
 			warnings.flush();
 			if (!silent)
 				stderr(
@@ -67,6 +67,9 @@ export default function build(
 						`created ${chalk.bold(files.join(', '))} in ${chalk.bold(ms(Date.now() - start))}`
 					)
 				);
+			if (bundle && bundle.getTimings) {
+				printTimings(bundle.getTimings());
+			}
 		})
 		.catch(handleError);
 }
