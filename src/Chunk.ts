@@ -64,7 +64,7 @@ export default class Chunk {
 	id: string;
 	name: string;
 	graph: Graph;
-	private orderedModules: Module[];
+	orderedModules: Module[];
 
 	// this represents the chunk module wrappings
 	// which form the output dependency graph
