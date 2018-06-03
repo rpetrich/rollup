@@ -2,7 +2,7 @@ import * as acorn from 'acorn';
 import injectDynamicImportPlugin from 'acorn-dynamic-import/lib/inject';
 import { timeEnd, timeStart } from './utils/timers';
 import first from './utils/first';
-import Module, { IdMap, ModuleJSON } from './Module';
+import Module, { CommentDescription, IdMap, ModuleJSON } from './Module';
 import ExternalModule from './ExternalModule';
 import ensureArray from './utils/ensureArray';
 import { handleMissingExport, load, makeOnwarn, resolveId } from './utils/defaults';
@@ -655,6 +655,7 @@ export default class Graph {
 					ast: Program;
 					sourcemapChain: RawSourceMap[];
 					resolvedIds?: IdMap;
+					comments: CommentDescription[];
 				}) => {
 					module.setSource(source);
 

@@ -111,6 +111,7 @@ export interface ModuleJSON {
 	ast: Program;
 	sourcemapChain: RawSourceMap[];
 	resolvedIds: IdMap;
+	comments: CommentDescription[];
 }
 
 export default class Module {
@@ -194,14 +195,16 @@ export default class Module {
 		originalSourcemap,
 		ast,
 		sourcemapChain,
-		resolvedIds
+		resolvedIds,
+		comments
 	}: {
 		code: string;
 		originalCode: string;
 		originalSourcemap: RawSourceMap;
-		ast: Program;
+		ast?: Program;
 		sourcemapChain: RawSourceMap[];
 		resolvedIds?: IdMap;
+		comments?: CommentDescription[];
 	}) {
 		this.code = code;
 		this.originalCode = originalCode;
@@ -219,6 +222,12 @@ export default class Module {
 			// TODO what happens to comments if AST is provided?
 			this.ast = <any>tryParse(this, this.graph.acornParse, this.graph.acornOptions);
 			this.astClone = clone(this.ast);
+		}
+
+		if (comments) {
+			for (const comment of comments) {
+				this.comments.push(comment);
+			}
 		}
 
 		timeEnd('generate ast', 3);
@@ -624,7 +633,8 @@ export default class Module {
 			originalSourcemap: this.originalSourcemap,
 			ast: this.astClone,
 			sourcemapChain: this.sourcemapChain,
-			resolvedIds: this.resolvedIds
+			resolvedIds: this.resolvedIds,
+			comments: this.comments.slice()
 		};
 	}
 
