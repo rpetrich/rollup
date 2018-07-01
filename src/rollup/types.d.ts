@@ -465,6 +465,7 @@ export interface ImportSpecifier {
 }
 
 export interface FinaliserOptions {
+	id: string;
 	indentString: string;
 	namedExportsMode: boolean;
 	hasExports: boolean;
@@ -479,6 +480,11 @@ export interface FinaliserOptions {
 	onwarn: WarningHandler;
 }
 
+export type DynamicImportMechanism = (
+	interop: boolean,
+	compact: boolean
+) => { left: string; right: string };
+
 export interface Finaliser {
 	name: string;
 	finalise(
@@ -491,4 +497,5 @@ export interface Finaliser {
 	emitsImportsAsIdentifiers?: boolean;
 	reservedIdentifiers?: string[];
 	requiresGlobalName?: boolean;
+	dynamicImportMechanism?: DynamicImportMechanism;
 }

@@ -756,7 +756,7 @@ export default class Chunk {
 			esModule: options.esModule !== false,
 			namespaceToStringTag: options.namespaceToStringTag === true,
 			indent: this.indentString,
-			format: finaliser.name
+			finaliser
 		};
 
 		// if an entry point facade, inline the execution list to avoid loading latency
@@ -1031,6 +1031,7 @@ export default class Chunk {
 		const magicString = finaliser.finalise(
 			this.renderedSource,
 			{
+				id: this.id,
 				indentString: this.indentString,
 				namedExportsMode: this.exportMode !== 'default',
 				hasExports,

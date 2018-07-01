@@ -6,6 +6,21 @@ import getExportBlock from './shared/getExportBlock';
 export const name = 'cjs';
 export const supportsCodeSplitting = true;
 
+export function dynamicImportMechanism(interop: boolean, compact: boolean) {
+	if (interop) {
+		const _ = compact ? '' : ' ';
+		return {
+			left: `Promise.resolve({${_}default:${_}require(`,
+			right: `)${_}})`
+		};
+	} else {
+		return {
+			left: 'Promise.resolve(require(',
+			right: '))'
+		};
+	}
+}
+
 export function finalise(
 	magicString: MagicStringBundle,
 	{

@@ -93,7 +93,7 @@ export default class NamespaceVariable extends Variable {
 			output += `${callee}(${name});`;
 		}
 
-		if (options.format === 'system' && this.exportName) {
+		if (options.finaliser.name === 'system' && this.exportName) {
 			output += `${n}exports('${this.exportName}',${_}${name});`;
 		}
 

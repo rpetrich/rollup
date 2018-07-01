@@ -7,6 +7,13 @@ export const manglesInternalExports = true;
 export const emitsImportsAsIdentifiers = true;
 export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
 
+export function dynamicImportMechanism() {
+	return {
+		left: 'module.import(',
+		right: ')'
+	};
+}
+
 function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	const starExcludes = new Set(exports.map(expt => expt.exported));
 	if (!starExcludes.has('default')) starExcludes.add('default');

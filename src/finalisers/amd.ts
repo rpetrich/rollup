@@ -8,6 +8,23 @@ import warnOnBuiltins from './shared/warnOnBuiltins';
 export const name = 'amd';
 export const supportsCodeSplitting = true;
 
+export function dynamicImportMechanism(interop: boolean, compact: boolean) {
+	const _ = compact ? '' : ' ';
+	const resolve = compact ? 'c' : 'resolve';
+	const reject = compact ? 'e' : 'reject';
+	if (interop) {
+		return {
+			left: `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`,
+			right: `],${_}function${_}(m)${_}{${_}${resolve}({${_}default:${_}m${_}})${_}},${_}${reject})${_}})`
+		};
+	} else {
+		return {
+			left: `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`,
+			right: `],${_}${resolve},${_}${reject})${_}})`
+		};
+	}
+}
+
 export function finalise(
 	magicString: MagicStringBundle,
 	{
