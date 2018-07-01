@@ -217,6 +217,7 @@ export interface InputOptions {
 	optimizeChunks?: boolean;
 	chunkGroupingSize?: number;
 	shimMissingExports?: boolean;
+	aggressivelyMergeIntoEntryPoint?: boolean;
 
 	// undocumented?
 	pureExternalModules?: boolean;

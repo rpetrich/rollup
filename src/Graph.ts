@@ -68,6 +68,7 @@ export default class Graph {
 	exportShimVariable: GlobalVariable;
 	treeshakingOptions: TreeshakingOptions;
 	varOrConst: 'var' | 'const';
+	private aggressivelyMergeIntoEntryPoint: boolean;
 
 	private createTransformEmitAsset: () => { assets: Asset[]; emitAsset: EmitAsset };
 
@@ -200,6 +201,7 @@ export default class Graph {
 		this.onwarn = options.onwarn || makeOnwarn();
 
 		this.varOrConst = options.preferConst ? 'const' : 'var';
+		this.aggressivelyMergeIntoEntryPoint = options.aggressivelyMergeIntoEntryPoint === true;
 
 		this.acornOptions = options.acorn || {};
 		const acornPluginsToInject = [];
@@ -493,7 +495,7 @@ export default class Graph {
 				}
 
 				// create entry point facades for entry module chunks that have tainted exports
-				if (!preserveModules) {
+				if (!preserveModules && !this.aggressivelyMergeIntoEntryPoint) {
 					for (const entryModule of entryModules) {
 						if (!entryModule.chunk.isEntryModuleFacade) {
 							const entryPointFacade = new Chunk(this, []);
@@ -518,6 +520,8 @@ export default class Graph {
 	) {
 		let curEntry: Module, curEntryHash: Uint8Array;
 		const allSeen: { [id: string]: boolean } = {};
+		const usedInEntry: { [id: string]: boolean } = {};
+		let aggressivelyMerge = this.aggressivelyMergeIntoEntryPoint && entryModules.length === 1;
 
 		const orderedModules: Module[] = [];
 
@@ -531,7 +535,7 @@ export default class Graph {
 			// entry point and colouring those modules by the hash of its id. Colours are mixed as
 			// hash xors, providing the unique colouring of the graph into unique hash chunks.
 			// This is really all there is to automated chunking, the rest is chunk wiring.
-			if (graphColouring) {
+			if (graphColouring && usedInEntry[module.id] !== true) {
 				if (!curEntry.chunkAlias) {
 					Uint8ArrayXor(module.entryPointsHash, curEntryHash);
 				} else {
@@ -576,6 +580,7 @@ export default class Graph {
 
 			if (allSeen[module.id]) return;
 			allSeen[module.id] = true;
+			if (aggressivelyMerge) usedInEntry[module.id] = true;
 
 			module.execIndex = orderedModules.length;
 			orderedModules.push(module);
@@ -608,6 +613,7 @@ Try defining "${chunkName}" first in the manualChunks definitions of the Rollup 
 			curEntryHash = randomUint8Array(10);
 			parents = { [curEntry.id]: null };
 			visit(curEntry);
+			aggressivelyMerge = false;
 		}
 
 		// new items can be added during this loop

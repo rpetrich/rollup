@@ -312,7 +312,10 @@ export default function rollup(
 									chunk.generateIdPreserveModules(inputBase);
 								} else {
 									let pattern, patternName;
-									if (chunk.isEntryModuleFacade) {
+									if (
+										chunk.isEntryModuleFacade ||
+										(chunk.isManualChunk && inputOptions.aggressivelyMergeIntoEntryPoint)
+									) {
 										pattern = outputOptions.entryFileNames || '[name].js';
 										patternName = 'output.entryFileNames';
 									} else {
