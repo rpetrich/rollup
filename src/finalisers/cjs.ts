@@ -1,20 +1,22 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import { FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
 import getExportBlock from './shared/getExportBlock';
 
-export default function cjs(
+export const name = 'cjs';
+export const supportsCodeSplitting = true;
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		isEntryModuleFacade,
 		namedExportsMode,
 		hasExports,
 		intro,
 		outro,
 		dependencies,
-		exports
+		exports,
+		preferConst
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -29,7 +31,7 @@ export default function cjs(
 
 	let needsInterop = false;
 
-	const varOrConst = graph.varOrConst;
+	const varOrConst = preferConst ? 'const' : 'var';
 	const interop = options.interop !== false;
 
 	let importBlock: string;

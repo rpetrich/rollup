@@ -278,7 +278,7 @@ export default class Module {
 			traceExport: this.traceExport.bind(this),
 			traceVariable: this.traceVariable.bind(this),
 			treeshake: this.graph.treeshake,
-			varOrConst: this.graph.varOrConst,
+			varOrConst: this.graph.preferConst ? 'const' : 'var',
 			warn: this.warn.bind(this)
 		};
 

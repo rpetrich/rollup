@@ -1,15 +1,16 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import { FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
 import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
 import warnOnBuiltins from './shared/warnOnBuiltins';
 
-export default function amd(
+export const name = 'amd';
+export const supportsCodeSplitting = true;
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		namedExportsMode,
 		hasExports,
 		indentString,
@@ -19,11 +20,13 @@ export default function amd(
 		needsAmdModule,
 		dependencies,
 		exports,
-		isEntryModuleFacade
+		isEntryModuleFacade,
+		preferConst,
+		onwarn
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
-	warnOnBuiltins(graph, dependencies);
+	warnOnBuiltins(onwarn, dependencies);
 
 	const deps = dependencies.map(m => `'${m.id}'`);
 	const args = dependencies.map(m => m.name);
@@ -58,7 +61,7 @@ export default function amd(
 	)})${_}{${useStrict}${n}${n}`;
 
 	// var foo__default = 'default' in foo ? foo['default'] : foo;
-	const interopBlock = getInteropBlock(dependencies, options, graph.varOrConst);
+	const interopBlock = getInteropBlock(dependencies, options, preferConst);
 	if (interopBlock) magicString.prepend(interopBlock + n + n);
 
 	if (intro) magicString.prepend(intro);

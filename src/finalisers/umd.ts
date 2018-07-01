@@ -1,7 +1,6 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
+import { FinaliserOptions, OutputOptions } from '../rollup/types';
 import error from '../utils/error';
-import { FinaliserOptions } from './index';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
 import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
@@ -9,6 +8,9 @@ import { keypath, property } from './shared/sanitize';
 import setupNamespace from './shared/setupNamespace';
 import trimEmptyImports from './shared/trimEmptyImports';
 import warnOnBuiltins from './shared/warnOnBuiltins';
+
+export const name = 'umd';
+export const requiresGlobalName = true;
 
 function globalProp(name: string) {
 	if (!name) return 'null';
@@ -22,17 +24,18 @@ function safeAccess(name: string, compact: boolean) {
 	return parts.map(part => ((acc += property(part)), acc)).join(compact ? '&&' : ` && `);
 }
 
-export default function umd(
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		namedExportsMode,
 		hasExports,
 		indentString: t,
 		intro,
 		outro,
 		dependencies,
-		exports
+		exports,
+		preferConst,
+		onwarn
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -48,7 +51,7 @@ export default function umd(
 		});
 	}
 
-	warnOnBuiltins(graph, dependencies);
+	warnOnBuiltins(onwarn, dependencies);
 
 	const amdDeps = dependencies.map(m => `'${m.id}'`);
 	const cjsDeps = dependencies.map(m => `require('${m.id}')`);
@@ -118,7 +121,7 @@ export default function umd(
 	wrapperIntro += `}(this,${_}(function${_}(${args})${_}{${useStrict}${n}`;
 
 	// var foo__default = 'default' in foo ? foo['default'] : foo;
-	const interopBlock = getInteropBlock(dependencies, options, graph.varOrConst);
+	const interopBlock = getInteropBlock(dependencies, options, preferConst);
 	if (interopBlock) magicString.prepend(interopBlock + n + n);
 
 	if (intro) magicString.prepend(intro);

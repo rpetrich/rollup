@@ -9,14 +9,23 @@ import LocalVariable from './ast/variables/LocalVariable';
 import NamespaceVariable from './ast/variables/NamespaceVariable';
 import Variable from './ast/variables/Variable';
 import ExternalModule from './ExternalModule';
-import finalisers from './finalisers/index';
 import Graph from './Graph';
 import Module from './Module';
-import { GlobalsOption, OutputOptions, RawSourceMap, RenderedModule } from './rollup/types';
+import {
+	ChunkDependencies,
+	ChunkExports,
+	Finaliser,
+	GlobalsOption,
+	ImportSpecifier,
+	ModuleDeclarationDependency,
+	OutputOptions,
+	RawSourceMap,
+	ReexportSpecifier,
+	RenderedModule
+} from './rollup/types';
 import { Addons } from './utils/addons';
 import { toBase64 } from './utils/base64';
 import collapseSourcemaps from './utils/collapseSourcemaps';
-import error from './utils/error';
 import getIndentString from './utils/getIndentString';
 import { makeLegal } from './utils/identifierHelpers';
 import { basename, dirname, normalize, relative, resolve } from './utils/path';
@@ -24,43 +33,6 @@ import { RenderOptions } from './utils/renderHelpers';
 import { makeUnique, renderNamePattern } from './utils/renderNamePattern';
 import { timeEnd, timeStart } from './utils/timers';
 import transformChunk from './utils/transformChunk';
-
-export interface ModuleDeclarations {
-	exports: ChunkExports;
-	dependencies: ModuleDeclarationDependency[];
-}
-
-export interface ModuleDeclarationDependency {
-	id: string;
-	namedExportsMode: boolean;
-	name: string;
-	globalName: string;
-	isChunk: boolean;
-	// these used as interop signifiers
-	exportsDefault: boolean;
-	exportsNames: boolean;
-	reexports?: ReexportSpecifier[];
-	imports?: ImportSpecifier[];
-}
-
-export type ChunkDependencies = ModuleDeclarationDependency[];
-
-export type ChunkExports = {
-	local: string;
-	exported: string;
-	hoisted: boolean;
-	uninitialized: boolean;
-}[];
-
-export interface ReexportSpecifier {
-	reexported: string;
-	imported: string;
-}
-
-export interface ImportSpecifier {
-	local: string;
-	imported: string;
-}
 
 function getGlobalName(
 	module: ExternalModule,
@@ -368,9 +340,9 @@ export default class Chunk {
 		}
 	}
 
-	generateInternalExports(options: OutputOptions) {
+	generateInternalExports(options: OutputOptions, finaliser: Finaliser) {
 		if (this.isEntryModuleFacade) return;
-		const mangle = options.format === 'system' || options.format === 'es' || options.compact;
+		const mangle = finaliser.manglesInternalExports || options.compact;
 		let i = 0,
 			safeExportName: string;
 		this.exportNames = Object.create(null);
@@ -451,23 +423,23 @@ export default class Chunk {
 		}
 	}
 
-	private finaliseImportMetas(options: OutputOptions): boolean {
+	private finaliseImportMetas(options: OutputOptions, finaliser: Finaliser): boolean {
 		let usesMechanism = false;
 		for (let i = 0; i < this.orderedModules.length; i++) {
 			const module = this.orderedModules[i];
 			const code = this.renderedModuleSources[i];
 			for (const importMeta of module.importMetas) {
-				if (importMeta.renderFinalMechanism(code, this.id, options.format, options.compact))
+				if (importMeta.renderFinalMechanism(code, this.id, finaliser.name, options.compact))
 					usesMechanism = true;
 			}
 		}
 		return usesMechanism;
 	}
 
-	private setIdentifierRenderResolutions(options: OutputOptions) {
+	private setIdentifierRenderResolutions(options: OutputOptions, finaliser: Finaliser) {
 		this.needsExportsShim = false;
 		const used = Object.create(null);
-		const esm = options.format === 'es' || options.format === 'system';
+		const esm = finaliser.emitsImportsAsIdentifiers;
 
 		// ensure no conflicts with globals
 		Object.keys(this.graph.scope.variables).forEach(name => (used[name] = 1));
@@ -482,8 +454,10 @@ export default class Chunk {
 		}
 
 		// reserved internal binding names for system format wiring
-		if (options.format === 'system') {
-			used._setter = used._starExcludes = used._$p = 1;
+		if (finaliser.reservedIdentifiers) {
+			for (const usedIdentifier of finaliser.reservedIdentifiers) {
+				used[usedIdentifier] = 1;
+			}
 		}
 
 		const toDeshadow: Set<string> = new Set();
@@ -579,6 +553,7 @@ export default class Chunk {
 
 	private getChunkDependencyDeclarations(
 		options: OutputOptions,
+		finaliser: Finaliser,
 		inputBase: string
 	): ChunkDependencies {
 		const reexportDeclarations = new Map<Chunk | ExternalModule, ReexportSpecifier[]>();
@@ -646,7 +621,7 @@ export default class Chunk {
 			let globalName: string;
 			if (dep instanceof ExternalModule) {
 				id = dep.renderPath || dep.setRenderPath(options, inputBase);
-				if (options.format === 'umd' || options.format === 'iife') {
+				if (finaliser.requiresGlobalName) {
 					globalName = getGlobalName(
 						dep,
 						options.globals,
@@ -740,7 +715,7 @@ export default class Chunk {
 		return visitDep(this);
 	}
 
-	private computeFullHash(addons: Addons, options: OutputOptions): string {
+	private computeFullHash(addons: Addons, finaliser: Finaliser): string {
 		const hash = sha256();
 
 		// own rendered source, except for finalizer wrapping
@@ -750,7 +725,7 @@ export default class Chunk {
 		hash.update(addons.hash);
 
 		// output options
-		hash.update(options.format);
+		hash.update(finaliser.name);
 
 		// import names of dependency sources
 		hash.update(this.dependencies.length);
@@ -765,7 +740,7 @@ export default class Chunk {
 	}
 
 	// prerender allows chunk hashes and names to be generated before finalizing
-	preRender(options: OutputOptions, inputBase: string) {
+	preRender(options: OutputOptions, finaliser: Finaliser, inputBase: string) {
 		timeStart('render modules', 3);
 
 		const magicString = new MagicStringBundle({ separator: options.compact ? '' : '\n\n' });
@@ -781,7 +756,7 @@ export default class Chunk {
 			esModule: options.esModule !== false,
 			namespaceToStringTag: options.namespaceToStringTag === true,
 			indent: this.indentString,
-			format: options.format
+			format: finaliser.name
 		};
 
 		// if an entry point facade, inline the execution list to avoid loading latency
@@ -807,7 +782,7 @@ export default class Chunk {
 			}
 		}
 
-		this.setIdentifierRenderResolutions(options);
+		this.setIdentifierRenderResolutions(options, finaliser);
 		this.prepareDynamicImports();
 
 		let hoistedSource = '';
@@ -847,7 +822,7 @@ export default class Chunk {
 
 		if (this.needsExportsShim) {
 			magicString.prepend(
-				`${n}${this.graph.varOrConst} _missingExportShim${_}=${_}void 0;${n}${n}`
+				`${n}${this.graph.preferConst ? 'const' : 'var'} _missingExportShim${_}=${_}void 0;${n}${n}`
 			);
 		}
 
@@ -868,7 +843,7 @@ export default class Chunk {
 		}
 
 		this.renderedDeclarations = {
-			dependencies: this.getChunkDependencyDeclarations(options, inputBase),
+			dependencies: this.getChunkDependencyDeclarations(options, finaliser, inputBase),
 			exports: this.exportMode === 'none' ? [] : this.getChunkExportDeclarations()
 		};
 
@@ -885,7 +860,13 @@ export default class Chunk {
 	 * chunkList allows updating references in other chunks for the merged chunk to this chunk
 	 * A new facade will be added to chunkList if tainting exports of either as an entry point
 	 */
-	merge(chunk: Chunk, chunkList: Chunk[], options: OutputOptions, inputBase: string) {
+	merge(
+		chunk: Chunk,
+		chunkList: Chunk[],
+		options: OutputOptions,
+		finaliser: Finaliser,
+		inputBase: string
+	) {
 		if (this.isEntryModuleFacade || chunk.isEntryModuleFacade)
 			throw new Error('Internal error: Code splitting chunk merges not supported for facades');
 
@@ -911,7 +892,7 @@ export default class Chunk {
 		const thisOldExportNames = this.exportNames;
 
 		// regenerate internal names
-		this.generateInternalExports(options);
+		this.generateInternalExports(options, finaliser);
 
 		const updateRenderedDeclaration = (
 			dep: ModuleDeclarationDependency,
@@ -983,7 +964,7 @@ export default class Chunk {
 		}
 
 		// re-render the merged chunk
-		this.preRender(options, inputBase);
+		this.preRender(options, finaliser, inputBase);
 	}
 
 	generateIdPreserveModules(preserveModulesRelativeDir: string) {
@@ -994,14 +975,14 @@ export default class Chunk {
 		pattern: string,
 		patternName: string,
 		addons: Addons,
-		options: OutputOptions,
+		finaliser: Finaliser,
 		existingNames: { [name: string]: any }
 	) {
 		const outName = makeUnique(
 			renderNamePattern(pattern, patternName, type => {
 				switch (type) {
 					case 'hash':
-						return this.computeFullHash(addons, options);
+						return this.computeFullHash(addons, finaliser);
 					case 'name':
 						if (this.entryModule && this.entryModule.chunkAlias) return this.entryModule.chunkAlias;
 						for (const module of this.orderedModules) {
@@ -1016,21 +997,11 @@ export default class Chunk {
 		this.id = outName;
 	}
 
-	render(options: OutputOptions, addons: Addons) {
+	render(options: OutputOptions, finaliser: Finaliser, addons: Addons) {
 		timeStart('render format', 3);
 
 		if (!this.renderedSource)
 			throw new Error('Internal error: Chunk render called before preRender');
-
-		const finalise = finalisers[options.format];
-		if (!finalise) {
-			error({
-				code: 'INVALID_OPTION',
-				message: `Invalid format: ${options.format} - valid options are ${Object.keys(
-					finalisers
-				).join(', ')}`
-			});
-		}
 
 		// populate ids in the rendered declarations only here
 		// as chunk ids known only after prerender
@@ -1049,7 +1020,7 @@ export default class Chunk {
 		}
 
 		this.finaliseDynamicImports();
-		const needsAmdModule = this.finaliseImportMetas(options);
+		const needsAmdModule = this.finaliseImportMetas(options, finaliser);
 
 		const hasExports =
 			this.renderedDeclarations.exports.length !== 0 ||
@@ -1057,7 +1028,7 @@ export default class Chunk {
 				dep => dep.reexports && dep.reexports.length !== 0
 			);
 
-		const magicString = finalise(
+		const magicString = finaliser.finalise(
 			this.renderedSource,
 			{
 				indentString: this.indentString,
@@ -1069,8 +1040,9 @@ export default class Chunk {
 				needsAmdModule,
 				dependencies: this.renderedDeclarations.dependencies,
 				exports: this.renderedDeclarations.exports,
-				graph: this.graph,
-				isEntryModuleFacade: this.isEntryModuleFacade
+				isEntryModuleFacade: this.isEntryModuleFacade,
+				preferConst: this.graph.preferConst,
+				onwarn: this.graph.warn.bind(this.graph)
 			},
 			options
 		);

@@ -67,7 +67,7 @@ export default class Graph {
 	shimMissingExports: boolean;
 	exportShimVariable: GlobalVariable;
 	treeshakingOptions: TreeshakingOptions;
-	varOrConst: 'var' | 'const';
+	preferConst: boolean;
 
 	private createTransformEmitAsset: () => { assets: Asset[]; emitAsset: EmitAsset };
 
@@ -199,7 +199,7 @@ export default class Graph {
 
 		this.onwarn = options.onwarn || makeOnwarn();
 
-		this.varOrConst = options.preferConst ? 'const' : 'var';
+		this.preferConst = options.preferConst;
 
 		this.acornOptions = options.acorn || {};
 		const acornPluginsToInject = [];

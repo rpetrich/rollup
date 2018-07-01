@@ -1,5 +1,6 @@
 import * as ESTree from 'estree';
 import { EventEmitter } from 'events';
+import { Bundle as MagicStringBundle } from 'magic-string';
 
 export const VERSION: string;
 
@@ -242,7 +243,7 @@ export interface OutputOptions {
 	dir?: string;
 	// this is optional at the base-level of RollupWatchOptions,
 	// which extends from this interface through config merge
-	format?: ModuleFormat;
+	format?: ModuleFormat | Finaliser;
 	name?: string;
 	globals?: GlobalsOption;
 	chunkFileNames?: string;
@@ -423,3 +424,71 @@ export interface RollupWatchOptions extends InputOptions {
 }
 
 export function watch(configs: RollupWatchOptions[]): Watcher;
+
+// Custom Finalisers
+
+export interface ModuleDeclarations {
+	exports: ChunkExports;
+	dependencies: ModuleDeclarationDependency[];
+}
+
+export interface ModuleDeclarationDependency {
+	id: string;
+	namedExportsMode: boolean;
+	name: string;
+	globalName: string;
+	isChunk: boolean;
+	// these used as interop signifiers
+	exportsDefault: boolean;
+	exportsNames: boolean;
+	reexports?: ReexportSpecifier[];
+	imports?: ImportSpecifier[];
+}
+
+export type ChunkDependencies = ModuleDeclarationDependency[];
+
+export type ChunkExports = {
+	local: string;
+	exported: string;
+	hoisted: boolean;
+	uninitialized: boolean;
+}[];
+
+export interface ReexportSpecifier {
+	reexported: string;
+	imported: string;
+}
+
+export interface ImportSpecifier {
+	local: string;
+	imported: string;
+}
+
+export interface FinaliserOptions {
+	indentString: string;
+	namedExportsMode: boolean;
+	hasExports: boolean;
+	intro: string;
+	outro: string;
+	dynamicImport: boolean;
+	needsAmdModule: boolean;
+	dependencies: ChunkDependencies;
+	exports: ChunkExports;
+	isEntryModuleFacade: boolean;
+	preferConst: boolean;
+	onwarn: WarningHandler;
+}
+
+export interface Finaliser {
+	name: string;
+	finalise(
+		magicString: MagicStringBundle,
+		finaliserOptions: FinaliserOptions,
+		options: OutputOptions
+	): MagicStringBundle;
+	supportsCodeSplitting?: boolean;
+	manglesInternalExports?: boolean;
+	emitsImportsAsIdentifiers?: boolean;
+	reservedIdentifiers?: string[];
+	requiresGlobalName?: boolean;
+}
