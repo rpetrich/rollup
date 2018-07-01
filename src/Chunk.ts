@@ -1028,25 +1028,28 @@ export default class Chunk {
 				dep => dep.reexports && dep.reexports.length !== 0
 			);
 
-		return Promise.resolve(finaliser.finalise(
-			this.renderedSource,
-			{
-				id: this.id,
-				indentString: this.indentString,
-				namedExportsMode: this.exportMode !== 'default',
-				hasExports,
-				intro: addons.intro,
-				outro: addons.outro,
-				dynamicImport: this.hasDynamicImport,
-				needsAmdModule,
-				dependencies: this.renderedDeclarations.dependencies,
-				exports: this.renderedDeclarations.exports,
-				isEntryModuleFacade: this.isEntryModuleFacade,
-				preferConst: this.graph.preferConst,
-				onwarn: this.graph.warn.bind(this.graph)
-			},
-			options
-		)).then(magicString => {
+		return Promise.resolve(
+			finaliser.finalise(
+				this.renderedSource,
+				{
+					id: this.id,
+					indentString: this.indentString,
+					namedExportsMode: this.exportMode !== 'default',
+					hasExports,
+					intro: addons.intro,
+					outro: addons.outro,
+					dynamicImport: this.hasDynamicImport,
+					needsAmdModule,
+					dependencies: this.renderedDeclarations.dependencies,
+					modules: this.renderedModules,
+					exports: this.renderedDeclarations.exports,
+					isEntryModuleFacade: this.isEntryModuleFacade,
+					preferConst: this.graph.preferConst,
+					onwarn: this.graph.warn.bind(this.graph)
+				},
+				options
+			)
+		).then(magicString => {
 			if (addons.banner) magicString.prepend(addons.banner);
 			if (addons.footer) magicString.append(addons.footer);
 			const prevCode = magicString.toString();
@@ -1071,7 +1074,13 @@ export default class Chunk {
 							this.graph.plugins.find(plugin => Boolean(plugin.transform || plugin.transformBundle))
 						) {
 							const decodedMap = magicString.generateDecodedMap({});
-							map = collapseSourcemaps(this, file, decodedMap, this.usedModules, chunkSourcemapChain);
+							map = collapseSourcemaps(
+								this,
+								file,
+								decodedMap,
+								this.usedModules,
+								chunkSourcemapChain
+							);
 						} else {
 							map = magicString.generateMap({ file, includeContent: true });
 						}

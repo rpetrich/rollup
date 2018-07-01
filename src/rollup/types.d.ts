@@ -474,6 +474,9 @@ export interface FinaliserOptions {
 	dynamicImport: boolean;
 	needsAmdModule: boolean;
 	dependencies: ChunkDependencies;
+	modules: {
+		[id: string]: RenderedModule;
+	};
 	exports: ChunkExports;
 	isEntryModuleFacade: boolean;
 	preferConst: boolean;
