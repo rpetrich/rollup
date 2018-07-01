@@ -1028,7 +1028,7 @@ export default class Chunk {
 				dep => dep.reexports && dep.reexports.length !== 0
 			);
 
-		const magicString = finaliser.finalise(
+		return Promise.resolve(finaliser.finalise(
 			this.renderedSource,
 			{
 				id: this.id,
@@ -1046,45 +1046,46 @@ export default class Chunk {
 				onwarn: this.graph.warn.bind(this.graph)
 			},
 			options
-		);
-		if (addons.banner) magicString.prepend(addons.banner);
-		if (addons.footer) magicString.append(addons.footer);
-		const prevCode = magicString.toString();
+		)).then(magicString => {
+			if (addons.banner) magicString.prepend(addons.banner);
+			if (addons.footer) magicString.append(addons.footer);
+			const prevCode = magicString.toString();
 
-		timeEnd('render format', 3);
+			timeEnd('render format', 3);
 
-		let map: SourceMap = null;
-		const chunkSourcemapChain: RawSourceMap[] = [];
+			let map: SourceMap = null;
+			const chunkSourcemapChain: RawSourceMap[] = [];
 
-		return transformChunk(this.graph, this, prevCode, chunkSourcemapChain, options).then(
-			(code: string) => {
-				if (options.sourcemap) {
-					timeStart('sourcemap', 3);
+			return transformChunk(this.graph, this, prevCode, chunkSourcemapChain, options).then(
+				(code: string) => {
+					if (options.sourcemap) {
+						timeStart('sourcemap', 3);
 
-					let file: string;
-					if (options.file) file = resolve(options.sourcemapFile || options.file);
-					else if (options.dir) file = resolve(options.dir, this.id);
-					else file = resolve(this.id);
+						let file: string;
+						if (options.file) file = resolve(options.sourcemapFile || options.file);
+						else if (options.dir) file = resolve(options.dir, this.id);
+						else file = resolve(this.id);
 
-					if (
-						this.graph.hasLoaders ||
-						this.graph.plugins.find(plugin => Boolean(plugin.transform || plugin.transformBundle))
-					) {
-						const decodedMap = magicString.generateDecodedMap({});
-						map = collapseSourcemaps(this, file, decodedMap, this.usedModules, chunkSourcemapChain);
-					} else {
-						map = magicString.generateMap({ file, includeContent: true });
+						if (
+							this.graph.hasLoaders ||
+							this.graph.plugins.find(plugin => Boolean(plugin.transform || plugin.transformBundle))
+						) {
+							const decodedMap = magicString.generateDecodedMap({});
+							map = collapseSourcemaps(this, file, decodedMap, this.usedModules, chunkSourcemapChain);
+						} else {
+							map = magicString.generateMap({ file, includeContent: true });
+						}
+
+						map.sources = map.sources.map(normalize);
+
+						timeEnd('sourcemap', 3);
 					}
 
-					map.sources = map.sources.map(normalize);
+					if (options.compact !== true && code[code.length - 1] !== '\n') code += '\n';
 
-					timeEnd('sourcemap', 3);
+					return { code, map };
 				}
-
-				if (options.compact !== true && code[code.length - 1] !== '\n') code += '\n';
-
-				return { code, map };
-			}
-		);
+			);
+		});
 	}
 }

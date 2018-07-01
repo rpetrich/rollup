@@ -491,7 +491,7 @@ export interface Finaliser {
 		magicString: MagicStringBundle,
 		finaliserOptions: FinaliserOptions,
 		options: OutputOptions
-	): MagicStringBundle;
+	): MagicStringBundle | Promise<MagicStringBundle>;
 	supportsCodeSplitting?: boolean;
 	manglesInternalExports?: boolean;
 	emitsImportsAsIdentifiers?: boolean;
