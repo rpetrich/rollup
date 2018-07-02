@@ -39,13 +39,13 @@ export default class Import extends NodeBase {
 			return;
 		}
 
-		if (options.finaliser.dynamicImportMechanism) {
-			const importMechanism = options.finaliser.dynamicImportMechanism(
-				this.resolutionInterop,
-				options.compact
-			);
-			code.overwrite(this.parent.start, this.parent.arguments[0].start, importMechanism.left);
-			code.overwrite(this.parent.arguments[0].end, this.parent.end, importMechanism.right);
+		if (options.finaliser.finaliseDynamicImport) {
+			options.finaliser.finaliseDynamicImport(code, {
+				interop: this.resolutionInterop,
+				compact: options.compact,
+				importRange: this.parent,
+				argumentRange: this.parent.arguments[0]
+			});
 		}
 	}
 

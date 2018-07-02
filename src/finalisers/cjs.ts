@@ -1,24 +1,28 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { FinaliserOptions, OutputOptions } from '../rollup/types';
+import MagicString from 'magic-string';
+import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
 import getExportBlock from './shared/getExportBlock';
 
 export const name = 'cjs';
 export const supportsCodeSplitting = true;
 
-export function dynamicImportMechanism(interop: boolean, compact: boolean) {
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ interop, compact, importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	const _ = compact ? '' : ' ';
+	let left;
+	let right;
 	if (interop) {
-		const _ = compact ? '' : ' ';
-		return {
-			left: `Promise.resolve({${_}default:${_}require(`,
-			right: `)${_}})`
-		};
+		left = `Promise.resolve({${_}default:${_}require(`;
+		right = `)${_}})`;
 	} else {
-		return {
-			left: 'Promise.resolve(require(',
-			right: '))'
-		};
+		left = 'Promise.resolve(require(';
+		right = '))';
 	}
+	magicString.overwrite(importRange.start, argumentRange.start, left);
+	magicString.overwrite(argumentRange.end, importRange.end, right);
 }
 
 export function finalise(

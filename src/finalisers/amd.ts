@@ -1,5 +1,6 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { FinaliserOptions, OutputOptions } from '../rollup/types';
+import MagicString from 'magic-string';
+import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
 import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
@@ -8,21 +9,24 @@ import warnOnBuiltins from './shared/warnOnBuiltins';
 export const name = 'amd';
 export const supportsCodeSplitting = true;
 
-export function dynamicImportMechanism(interop: boolean, compact: boolean) {
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ interop, compact, importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
 	const _ = compact ? '' : ' ';
 	const resolve = compact ? 'c' : 'resolve';
 	const reject = compact ? 'e' : 'reject';
+	let left;
+	let right;
 	if (interop) {
-		return {
-			left: `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`,
-			right: `],${_}function${_}(m)${_}{${_}${resolve}({${_}default:${_}m${_}})${_}},${_}${reject})${_}})`
-		};
+		left = `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`;
+		right = `],${_}function${_}(m)${_}{${_}${resolve}({${_}default:${_}m${_}})${_}},${_}${reject})${_}})`;
 	} else {
-		return {
-			left: `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`,
-			right: `],${_}${resolve},${_}${reject})${_}})`
-		};
+		left = `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`;
+		right = `],${_}${resolve},${_}${reject})${_}})`;
 	}
+	magicString.overwrite(importRange.start, argumentRange.start, left);
+	magicString.overwrite(argumentRange.end, importRange.end, right);
 }
 
 export function finalise(

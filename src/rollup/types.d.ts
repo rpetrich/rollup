@@ -1,6 +1,7 @@
 import * as ESTree from 'estree';
 import { EventEmitter } from 'events';
 import { Bundle as MagicStringBundle } from 'magic-string';
+import MagicString from 'magic-string';
 
 export const VERSION: string;
 
@@ -483,10 +484,12 @@ export interface FinaliserOptions {
 	onwarn: WarningHandler;
 }
 
-export type DynamicImportMechanism = (
-	interop: boolean,
-	compact: boolean
-) => { left: string; right: string };
+export interface FinaliserDynamicImportOptions {
+	interop: boolean;
+	compact: boolean;
+	importRange: { start: number; end: number };
+	argumentRange: { start: number; end: number };
+}
 
 export interface Finaliser {
 	name: string;
@@ -495,10 +498,13 @@ export interface Finaliser {
 		finaliserOptions: FinaliserOptions,
 		options: OutputOptions
 	): MagicStringBundle | Promise<MagicStringBundle>;
+	finaliseDynamicImport?(
+		magicString: MagicString,
+		dynamicImportOptions: FinaliserDynamicImportOptions
+	): void;
 	supportsCodeSplitting?: boolean;
 	manglesInternalExports?: boolean;
 	emitsImportsAsIdentifiers?: boolean;
 	reservedIdentifiers?: string[];
 	requiresGlobalName?: boolean;
-	dynamicImportMechanism?: DynamicImportMechanism;
 }

@@ -1,5 +1,11 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { FinaliserOptions, ModuleDeclarations, OutputOptions } from '../rollup/types';
+import MagicString from 'magic-string';
+import {
+	FinaliserDynamicImportOptions,
+	FinaliserOptions,
+	ModuleDeclarations,
+	OutputOptions
+} from '../rollup/types';
 
 export const name = 'system';
 export const supportsCodeSplitting = true;
@@ -7,11 +13,12 @@ export const manglesInternalExports = true;
 export const emitsImportsAsIdentifiers = true;
 export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
 
-export function dynamicImportMechanism() {
-	return {
-		left: 'module.import(',
-		right: ')'
-	};
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	magicString.overwrite(importRange.start, argumentRange.start, 'module.import(');
+	magicString.overwrite(argumentRange.end, importRange.end, ')');
 }
 
 function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
