@@ -504,6 +504,7 @@ export interface Finaliser {
 		magicString: MagicString,
 		dynamicImportOptions: FinaliserDynamicImportOptions
 	): void;
+	dynamicImportArgument?(path: string): string;
 	supportsCodeSplitting?: boolean;
 	manglesInternalExports?: boolean;
 	emitsImportsAsIdentifiers?: boolean;

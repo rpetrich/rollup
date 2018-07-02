@@ -399,7 +399,7 @@ export default class Chunk {
 		}
 	}
 
-	private finaliseDynamicImports() {
+	private finaliseDynamicImports(finaliser: Finaliser) {
 		for (let i = 0; i < this.orderedModules.length; i++) {
 			const module = this.orderedModules[i];
 			const code = this.renderedModuleSources[i];
@@ -412,10 +412,20 @@ export default class Chunk {
 					if (resolution.chunk !== this) {
 						let relPath = normalize(relative(dirname(this.id), resolution.chunk.id));
 						if (!relPath.startsWith('../')) relPath = './' + relPath;
-						node.renderFinalResolution(code, `"${relPath}"`);
+						node.renderFinalResolution(
+							code,
+							finaliser.dynamicImportArgument
+								? finaliser.dynamicImportArgument(relPath)
+								: JSON.stringify(relPath)
+						);
 					}
 				} else if (resolution instanceof ExternalModule) {
-					node.renderFinalResolution(code, `"${resolution.id}"`);
+					node.renderFinalResolution(
+						code,
+						finaliser.dynamicImportArgument
+							? finaliser.dynamicImportArgument(resolution.id)
+							: JSON.stringify(resolution.id)
+					);
 					// AST Node -> source replacement
 				} else {
 					node.renderFinalResolution(code, resolution);
@@ -1020,7 +1030,7 @@ export default class Chunk {
 			renderedDependency.id = relPath;
 		}
 
-		this.finaliseDynamicImports();
+		this.finaliseDynamicImports(finaliser);
 		const needsAmdModule = this.finaliseImportMetas(options, finaliser);
 
 		const hasExports =
