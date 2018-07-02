@@ -363,7 +363,7 @@ export default function rollup(
 
 							// render chunk import statements and finalizer wrappers given known names
 							return Promise.all(
-								chunks.map(chunk => {
+								chunks.reverse().map(chunk => {
 									const chunkId = chunk.id;
 									return chunk.render(outputOptions, finaliser, addons).then(rendered => {
 										const outputChunk = <OutputChunk>outputBundle[chunkId];
