@@ -1,20 +1,40 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import MagicString from 'magic-string';
+import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
-import getExportBlock from './shared/getExportBlock';
 
-export default function cjs(
+export const name = 'cjs';
+export const supportsCodeSplitting = true;
+
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ interop, compact, importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	const _ = compact ? '' : ' ';
+	let left;
+	let right;
+	if (interop) {
+		left = `Promise.resolve({${_}default:${_}require(`;
+		right = `)${_}})`;
+	} else {
+		left = 'Promise.resolve(require(';
+		right = '))';
+	}
+	magicString.overwrite(importRange.start, argumentRange.start, left);
+	magicString.overwrite(argumentRange.end, importRange.end, right);
+}
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		isEntryModuleFacade,
 		namedExportsMode,
 		hasExports,
 		intro,
 		outro,
 		dependencies,
-		exports
+		preferConst,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -29,7 +49,7 @@ export default function cjs(
 
 	let needsInterop = false;
 
-	const varOrConst = graph.varOrConst;
+	const varOrConst = preferConst ? 'const' : 'var';
 	const interop = options.interop !== false;
 
 	let importBlock: string;
@@ -110,14 +130,7 @@ export default function cjs(
 
 	if (importBlock) intro += importBlock + n + n;
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact,
-		`module.exports${_}=${_}`
-	);
+	const exportBlock = generateExportBlock(`module.exports${_}=${_}`);
 
 	magicString.prepend(intro);
 

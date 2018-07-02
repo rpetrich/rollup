@@ -1,33 +1,10 @@
-import { Bundle as MagicStringBundle } from 'magic-string';
-import { ChunkDependencies, ChunkExports } from '../Chunk';
-import Graph from '../Graph';
-import { OutputOptions } from '../rollup/types';
-import amd from './amd';
-import cjs from './cjs';
-import esm from './esm';
-import iife from './iife';
-import system from './system';
-import umd from './umd';
-
-export interface FinaliserOptions {
-	indentString: string;
-	namedExportsMode: boolean;
-	hasExports: boolean;
-	intro: string;
-	outro: string;
-	dynamicImport: boolean;
-	needsAmdModule: boolean;
-	dependencies: ChunkDependencies;
-	exports: ChunkExports;
-	graph: Graph;
-	isEntryModuleFacade: boolean;
-}
-
-export type Finaliser = (
-	magicString: MagicStringBundle,
-	finaliserOptions: FinaliserOptions,
-	options: OutputOptions
-) => MagicStringBundle;
+import { Finaliser } from '../rollup/types';
+import * as amd from './amd';
+import * as cjs from './cjs';
+import * as esm from './esm';
+import * as iife from './iife';
+import * as system from './system';
+import * as umd from './umd';
 
 export default { system, amd, cjs, es: esm, iife, umd } as {
 	[format: string]: Finaliser;

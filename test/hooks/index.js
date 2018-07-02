@@ -571,4 +571,38 @@ module.exports = input;
 				return bundle.generate({ format: 'es' });
 			});
 	});
+
+
+	it('supports custom finaliser', () => {
+		return rollup
+			.rollup({
+				input: 'input',
+				plugins: [
+					loader({
+						input: `export { a as default } from 'dep';`,
+						dep: `export var a = 1; export var b = 2;`
+					}),
+				]
+			})
+			.then(bundle => {
+				return bundle.generate({
+					format: {
+						name: 'custom',
+						finalise(magicString, finaliserOptions, options) {
+							assert.equal(finaliserOptions.exports.length, 1);
+							assert.equal(finaliserOptions.exports[0].local, 'a');
+							assert.equal(finaliserOptions.exports[0].exported, 'default');
+							return magicString.prepend('// custom finaliser\n');
+						},
+					}
+				});
+			})
+			.then(output => {
+				// console.log(output);
+				assert.equal(output.imports.length, 0);
+				assert.equal(output.exports.length, 1);
+				assert.equal(output.exports[0], 'default');
+				assert.equal(output.code, '// custom finaliser\nvar a = 1;\n');
+			});
+	});
 });

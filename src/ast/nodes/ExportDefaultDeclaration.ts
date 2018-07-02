@@ -92,7 +92,7 @@ export default class ExportDefaultDeclaration extends NodeBase {
 			);
 		} else if (this.variable.referencesOriginal()) {
 			// Remove altogether to prevent re-declaring the same variable
-			if (options.format === 'system' && this.variable.exportName) {
+			if (options.finaliser.name === 'system' && this.variable.exportName) {
 				code.overwrite(
 					start,
 					end,
@@ -136,7 +136,7 @@ export default class ExportDefaultDeclaration extends NodeBase {
 			);
 		}
 		if (
-			options.format === 'system' &&
+			options.finaliser.name === 'system' &&
 			isClassDeclaration(this.declaration) &&
 			this.variable.exportName
 		) {
@@ -150,7 +150,7 @@ export default class ExportDefaultDeclaration extends NodeBase {
 		options: RenderOptions
 	) {
 		const systemBinding =
-			options.format === 'system' && this.variable.exportName
+			options.finaliser.name === 'system' && this.variable.exportName
 				? `exports('${this.variable.exportName}', `
 				: '';
 		code.overwrite(

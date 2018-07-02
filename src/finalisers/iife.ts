@@ -1,9 +1,7 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
+import { FinaliserOptions, OutputOptions } from '../rollup/types';
 import error from '../utils/error';
 import { isLegal } from '../utils/identifierHelpers';
-import { FinaliserOptions } from './index';
-import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
 import { keypath } from './shared/sanitize';
 import setupNamespace from './shared/setupNamespace';
@@ -12,17 +10,21 @@ import warnOnBuiltins from './shared/warnOnBuiltins';
 
 const thisProp = (name: string) => `this${keypath(name)}`;
 
-export default function iife(
+export const name = 'iife';
+export const requiresGlobalName = true;
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		namedExportsMode,
 		hasExports,
 		indentString: t,
 		intro,
 		outro,
 		dependencies,
-		exports
+		preferConst,
+		onwarn,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -40,7 +42,7 @@ export default function iife(
 		});
 	}
 
-	warnOnBuiltins(graph, dependencies);
+	warnOnBuiltins(onwarn, dependencies);
 
 	const external = trimEmptyImports(dependencies);
 	const deps = external.map(dep => dep.globalName || 'null');
@@ -66,8 +68,9 @@ export default function iife(
 	let wrapperIntro = `(function${_}(${args})${_}{${n}${useStrict}`;
 
 	if (hasExports && !extend) {
+		const varOrConst = preferConst ? 'const' : 'var';
 		wrapperIntro =
-			(isNamespaced ? thisProp(name) : `${graph.varOrConst} ${name}`) + `${_}=${_}${wrapperIntro}`;
+			(isNamespaced ? thisProp(name) : `${varOrConst} ${name}`) + `${_}=${_}${wrapperIntro}`;
 	}
 
 	if (isNamespaced) {
@@ -82,18 +85,12 @@ export default function iife(
 	}
 
 	// var foo__default = 'default' in foo ? foo['default'] : foo;
-	const interopBlock = getInteropBlock(dependencies, options, graph.varOrConst);
+	const interopBlock = getInteropBlock(dependencies, options, preferConst);
 	if (interopBlock) magicString.prepend(interopBlock + n + n);
 
 	if (intro) magicString.prepend(intro);
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact
-	);
+	const exportBlock = generateExportBlock();
 	if (exportBlock) magicString.append(n + n + exportBlock);
 	if (outro) magicString.append(outro);
 

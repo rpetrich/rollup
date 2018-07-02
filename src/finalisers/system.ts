@@ -1,7 +1,25 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { ModuleDeclarations } from '../Chunk';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import MagicString from 'magic-string';
+import {
+	FinaliserDynamicImportOptions,
+	FinaliserOptions,
+	ModuleDeclarations,
+	OutputOptions
+} from '../rollup/types';
+
+export const name = 'system';
+export const supportsCodeSplitting = true;
+export const manglesInternalExports = true;
+export const emitsImportsAsIdentifiers = true;
+export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
+
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	magicString.overwrite(importRange.start, argumentRange.start, 'module.import(');
+	magicString.overwrite(argumentRange.end, importRange.end, ')');
+}
 
 function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	const starExcludes = new Set(exports.map(expt => expt.exported));
@@ -17,9 +35,9 @@ function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	return starExcludes;
 }
 
-export default function system(
+export function finalise(
 	magicString: MagicStringBundle,
-	{ graph, indentString: t, intro, outro, dependencies, exports }: FinaliserOptions,
+	{ indentString: t, intro, outro, dependencies, exports, preferConst }: FinaliserOptions,
 	options: OutputOptions
 ) {
 	const n = options.compact ? '' : '\n';
@@ -30,7 +48,7 @@ export default function system(
 	const importBindings: string[] = [];
 	let starExcludes: Set<string>;
 	const setters: string[] = [];
-	const varOrConst = graph.varOrConst;
+	const varOrConst = preferConst ? 'const' : 'var';
 
 	dependencies.forEach(({ imports, reexports }) => {
 		const setter: string[] = [];
