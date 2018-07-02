@@ -9,6 +9,7 @@ import LocalVariable from './ast/variables/LocalVariable';
 import NamespaceVariable from './ast/variables/NamespaceVariable';
 import Variable from './ast/variables/Variable';
 import ExternalModule from './ExternalModule';
+import getExportBlock from './finalisers/shared/getExportBlock';
 import Graph from './Graph';
 import Module from './Module';
 import {
@@ -1028,24 +1029,37 @@ export default class Chunk {
 				dep => dep.reexports && dep.reexports.length !== 0
 			);
 
+		const exports = this.renderedDeclarations.exports;
+		const dependencies = this.renderedDeclarations.dependencies;
+		const namedExportsMode = this.exportMode !== 'default';
 		return Promise.resolve(
 			finaliser.finalise(
 				this.renderedSource,
 				{
 					id: this.id,
 					indentString: this.indentString,
-					namedExportsMode: this.exportMode !== 'default',
+					namedExportsMode,
 					hasExports,
 					intro: addons.intro,
 					outro: addons.outro,
 					dynamicImport: this.hasDynamicImport,
 					needsAmdModule,
-					dependencies: this.renderedDeclarations.dependencies,
+					dependencies,
 					modules: this.renderedModules,
-					exports: this.renderedDeclarations.exports,
+					exports,
 					isEntryModuleFacade: this.isEntryModuleFacade,
 					preferConst: this.graph.preferConst,
-					onwarn: this.graph.warn.bind(this.graph)
+					onwarn: this.graph.warn.bind(this.graph),
+					generateExportBlock(mechanism: string = 'return ') {
+						return getExportBlock(
+							exports,
+							dependencies,
+							namedExportsMode,
+							options.interop,
+							options.compact,
+							mechanism
+						);
+					}
 				},
 				options
 			)

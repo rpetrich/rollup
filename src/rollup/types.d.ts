@@ -482,6 +482,7 @@ export interface FinaliserOptions {
 	isEntryModuleFacade: boolean;
 	preferConst: boolean;
 	onwarn: WarningHandler;
+	generateExportBlock(mechanism?: string): string;
 }
 
 export interface FinaliserDynamicImportOptions {

@@ -2,7 +2,6 @@ import { Bundle as MagicStringBundle } from 'magic-string';
 import { FinaliserOptions, OutputOptions } from '../rollup/types';
 import error from '../utils/error';
 import { isLegal } from '../utils/identifierHelpers';
-import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
 import { keypath } from './shared/sanitize';
 import setupNamespace from './shared/setupNamespace';
@@ -23,9 +22,9 @@ export function finalise(
 		intro,
 		outro,
 		dependencies,
-		exports,
 		preferConst,
-		onwarn
+		onwarn,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -91,13 +90,7 @@ export function finalise(
 
 	if (intro) magicString.prepend(intro);
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact
-	);
+	const exportBlock = generateExportBlock();
 	if (exportBlock) magicString.append(n + n + exportBlock);
 	if (outro) magicString.append(outro);
 

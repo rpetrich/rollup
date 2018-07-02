@@ -2,7 +2,6 @@ import { Bundle as MagicStringBundle } from 'magic-string';
 import MagicString from 'magic-string';
 import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
-import getExportBlock from './shared/getExportBlock';
 
 export const name = 'cjs';
 export const supportsCodeSplitting = true;
@@ -34,8 +33,8 @@ export function finalise(
 		intro,
 		outro,
 		dependencies,
-		exports,
-		preferConst
+		preferConst,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -131,14 +130,7 @@ export function finalise(
 
 	if (importBlock) intro += importBlock + n + n;
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact,
-		`module.exports${_}=${_}`
-	);
+	const exportBlock = generateExportBlock(`module.exports${_}=${_}`);
 
 	magicString.prepend(intro);
 

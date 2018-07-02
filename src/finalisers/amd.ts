@@ -2,7 +2,6 @@ import { Bundle as MagicStringBundle } from 'magic-string';
 import MagicString from 'magic-string';
 import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
-import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
 import warnOnBuiltins from './shared/warnOnBuiltins';
 
@@ -40,10 +39,10 @@ export function finalise(
 		dynamicImport,
 		needsAmdModule,
 		dependencies,
-		exports,
 		isEntryModuleFacade,
 		preferConst,
-		onwarn
+		onwarn,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
@@ -87,13 +86,7 @@ export function finalise(
 
 	if (intro) magicString.prepend(intro);
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact
-	);
+	const exportBlock = generateExportBlock();
 	if (exportBlock) magicString.append(n + n + exportBlock);
 	if (namedExportsMode && hasExports && isEntryModuleFacade && options.esModule)
 		magicString.append(`${n}${n}${options.compact ? compactEsModuleExport : esModuleExport}`);
