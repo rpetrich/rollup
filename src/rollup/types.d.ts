@@ -210,8 +210,10 @@ export interface InputOptions {
 	context?: string;
 	moduleContext?: string | ((id: string) => string) | { [id: string]: string };
 	watch?: WatcherOptions;
-	inlineDynamicImports?: boolean;
 	experimentalCodeSplitting?: boolean;
+	experimentalDynamicImport?: boolean;
+	experimentalTopLevelAwait?: boolean;
+	inlineDynamicImports: boolean;
 	preserveSymlinks?: boolean;
 	experimentalPreserveModules?: boolean;
 	optimizeChunks?: boolean;
@@ -232,7 +234,7 @@ export interface InputOptions {
 	resolveExternal?: any;
 }
 
-export type ModuleFormat = 'amd' | 'cjs' | 'system' | 'es' | 'es6' | 'iife' | 'umd';
+export type ModuleFormat = 'amd' | 'cjs' | 'system' | 'es' | 'esm' | 'es6' | 'iife' | 'umd';
 
 export type OptionsPaths = Record<string, string> | ((id: string) => string);
 

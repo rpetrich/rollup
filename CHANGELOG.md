@@ -1,5 +1,29 @@
 # rollup changelog
 
+## 0.63.4
+*2018-07-20*
+* Use turbocolor instead of chalk ([#2339](https://github.com/rollup/rollup/pull/2339))
+
+## 0.63.3
+*2018-07-20*
+* Handle expressions where "in" and "instanceof" are applied to primitive values ([#2344](https://github.com/rollup/rollup/pull/2344))
+
+## 0.63.2
+*2018-07-18*
+* Fix bind order in for-of loops ([#2338](https://github.com/rollup/rollup/pull/2338))
+
+## 0.63.1
+*2018-07-18*
+
+## 0.63.0
+*2018-07-17*
+* Fix many tree-shaking related issues ([#2315](https://github.com/rollup/rollup/pull/2315))
+* Add experimental support for top-level await ([#2235](https://github.com/rollup/rollup/pull/2235))
+* Prevent duplicate version printout in watch mode ([#2325](https://github.com/rollup/rollup/pull/2325))
+* Respect error frames provided by plugins ([#2309](https://github.com/rollup/rollup/pull/2309))
+* Add `esm` format alias to types ([#2327](https://github.com/rollup/rollup/pull/2327))
+* Further unify internal test setup ([#2329](https://github.com/rollup/rollup/pull/2329))
+
 ## 0.62.0
 *2018-06-27*
 * Add option to automatically shim missing exports ([#2118](https://github.com/rollup/rollup/pull/2118))
