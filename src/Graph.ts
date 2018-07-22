@@ -60,7 +60,7 @@ export default class Graph {
 	onwarn: WarningHandler;
 	plugins: Plugin[];
 	pluginContext: PluginContext;
-	reassignmentTracker: EntityPathTracker;
+	deoptimizationTracker: EntityPathTracker;
 	resolveDynamicImport: ResolveDynamicImportHook;
 	resolveId: (id: string, parent: string) => Promise<string | boolean | void>;
 	scope: GlobalScope;
@@ -78,7 +78,7 @@ export default class Graph {
 
 	constructor(options: InputOptions, watcher?: Watcher) {
 		this.curChunkIndex = 0;
-		this.reassignmentTracker = new EntityPathTracker();
+		this.deoptimizationTracker = new EntityPathTracker();
 		this.cachedModules = new Map();
 		if (options.cache) {
 			if (options.cache.modules) {
@@ -217,6 +217,10 @@ export default class Graph {
 		this.acornOptions.plugins = this.acornOptions.plugins || {};
 		this.acornOptions.plugins.dynamicImport = true;
 		this.acornOptions.plugins.importMeta = true;
+
+		if (options.experimentalTopLevelAwait) {
+			(<any>this.acornOptions).allowAwaitOutsideFunction = true;
+		}
 
 		acornPluginsToInject.push(...ensureArray(options.acornInjectPlugins));
 		this.acornParse = acornPluginsToInject.reduce((acc, plugin) => plugin(acc), acorn).parse;
