@@ -9,6 +9,7 @@ import {
 
 export const name = 'system';
 export const supportsCodeSplitting = true;
+export const supportsTopLevelAwait = true;
 export const manglesInternalExports = true;
 export const emitsImportsAsIdentifiers = true;
 export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
@@ -37,7 +38,15 @@ function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 
 export function finalise(
 	magicString: MagicStringBundle,
-	{ indentString: t, intro, outro, dependencies, exports, preferConst }: FinaliserOptions,
+	{
+		indentString: t,
+		intro,
+		outro,
+		dependencies,
+		exports,
+		preferConst,
+		usesTopLevelAwait
+	}: FinaliserOptions,
 	options: OutputOptions
 ) {
 	const n = options.compact ? '' : '\n';
@@ -161,7 +170,9 @@ export function finalise(
 					.join(`,${_}`)}],`
 			: ''
 	}${n}`;
-	wrapperStart += `${t}${t}execute:${_}function${_}()${_}{${n}${n}`;
+	wrapperStart += `${t}${t}execute:${_}${
+		usesTopLevelAwait ? `async${_}` : ''
+	}function${_}()${_}{${n}${n}`;
 	if (hoistedExports.length)
 		wrapperStart += `${t}${t}${t}` + hoistedExports.join(`${n}${t}${t}${t}`) + n + n;
 

@@ -50,7 +50,7 @@ function getGlobalName(
 			guess: module.name,
 			message: `No name was provided for external module '${
 				module.id
-			}' in options.globals – guessing '${module.name}'`
+			}' in output.globals – guessing '${module.name}'`
 		});
 		return module.name;
 	}
@@ -1039,6 +1039,16 @@ export default class Chunk {
 				dep => dep.reexports && dep.reexports.length !== 0
 			);
 
+		const usesTopLevelAwait = this.orderedModules.some(module => module.usesTopLevelAwait);
+		if (usesTopLevelAwait && !finaliser.supportsTopLevelAwait) {
+			error({
+				code: 'INVALID_TLA_FORMAT',
+				message: `Module format ${
+					options.format
+				} does not support top-level await. Use the "es" or "system" output formats rather.`
+			});
+		}
+
 		const exports = this.renderedDeclarations.exports;
 		const dependencies = this.renderedDeclarations.dependencies;
 		const namedExportsMode = this.exportMode !== 'default';
@@ -1058,6 +1068,7 @@ export default class Chunk {
 					modules: this.renderedModules,
 					exports,
 					isEntryModuleFacade: this.isEntryModuleFacade,
+					usesTopLevelAwait,
 					preferConst: this.graph.preferConst,
 					onwarn: this.graph.warn.bind(this.graph),
 					generateExportBlock(mechanism: string = 'return ') {

@@ -5,6 +5,7 @@ import { FinaliserOptions, OutputOptions } from '../rollup/types';
 
 export const name = 'es';
 export const supportsCodeSplitting = true;
+export const supportsTopLevelAwait = true;
 export const manglesInternalExports = true;
 export const emitsImportsAsIdentifiers = true;
 

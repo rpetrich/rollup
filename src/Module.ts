@@ -90,11 +90,12 @@ export interface AstContext {
 	moduleContext: string;
 	nodeConstructors: { [name: string]: typeof NodeBase };
 	propertyReadSideEffects: boolean;
-	reassignmentTracker: EntityPathTracker;
+	deoptimizationTracker: EntityPathTracker;
 	requestTreeshakingPass: () => void;
 	traceExport: (name: string) => Variable;
 	traceVariable: (name: string) => Variable;
 	treeshake: boolean;
+	usesTopLevelAwait: boolean;
 	varOrConst: string;
 	warn: (warning: RollupWarning, pos: number) => void;
 }
@@ -177,6 +178,7 @@ export default class Module {
 	entryPointsHash: Uint8Array;
 	chunk: Chunk;
 	exportAllModules: (Module | ExternalModule)[];
+	usesTopLevelAwait: boolean = false;
 
 	private ast: Program;
 	private astContext: AstContext;
@@ -265,19 +267,20 @@ export default class Module {
 			getReexports: this.getReexports.bind(this),
 			getModuleExecIndex: () => this.execIndex,
 			getModuleName: this.basename.bind(this),
-			includeNamespace: this.includeNamespace.bind(this),
 			imports: this.imports,
+			includeNamespace: this.includeNamespace.bind(this),
 			isCrossChunkImport: importDescription => importDescription.module.chunk !== this.chunk,
 			magicString: this.magicString,
 			moduleContext: this.context,
 			nodeConstructors,
 			propertyReadSideEffects:
 				!this.graph.treeshake || this.graph.treeshakingOptions.propertyReadSideEffects,
-			reassignmentTracker: this.graph.reassignmentTracker,
+			deoptimizationTracker: this.graph.deoptimizationTracker,
 			requestTreeshakingPass: () => (this.needsTreeshakingPass = true),
 			traceExport: this.traceExport.bind(this),
 			traceVariable: this.traceVariable.bind(this),
 			treeshake: this.graph.treeshake,
+			usesTopLevelAwait: false,
 			varOrConst: this.graph.preferConst ? 'const' : 'var',
 			warn: this.warn.bind(this)
 		};
@@ -447,7 +450,7 @@ export default class Module {
 			const variable = this.traceExport(exportName);
 
 			variable.exportName = exportName;
-			variable.reassignPath(UNKNOWN_PATH);
+			variable.deoptimizePath(UNKNOWN_PATH);
 			variable.include();
 
 			if (variable.isNamespace) {
@@ -464,7 +467,7 @@ export default class Module {
 				variable.reexported = (<ExternalVariable>variable).module.reexported = true;
 			} else {
 				variable.include();
-				variable.reassignPath(UNKNOWN_PATH);
+				variable.deoptimizePath(UNKNOWN_PATH);
 			}
 		}
 	}
@@ -639,6 +642,7 @@ export default class Module {
 	render(options: RenderOptions): MagicString {
 		const magicString = this.magicString.clone();
 		this.ast.render(magicString, options);
+		this.usesTopLevelAwait = this.astContext.usesTopLevelAwait;
 		return magicString;
 	}
 
