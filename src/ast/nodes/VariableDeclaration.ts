@@ -126,7 +126,7 @@ export default class VariableDeclaration extends NodeBase {
 				isInDeclaration = false;
 			} else {
 				if (
-					options.format === 'system' &&
+					options.finaliser.name === 'system' &&
 					node.init !== null &&
 					isIdentifier(node.id) &&
 					node.id.variable.exportName

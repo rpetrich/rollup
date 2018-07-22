@@ -172,7 +172,7 @@ export default class Identifier extends NodeBase {
 			) {
 				code.appendRight(this.start, '0, ');
 			}
-			if (options.format === 'system' && this.variable.exportName) {
+			if (options.finaliser.name === 'system' && this.variable.exportName) {
 				this.renderSystemBindingUpdate(code, name);
 			}
 		}

@@ -22,17 +22,15 @@ export default class ClassDeclaration extends ClassNode {
 
 	parseNode(esTreeNode: GenericEsTreeNode) {
 		if (esTreeNode.id !== null) {
-			this.id = <Identifier>new this.context.nodeConstructors.Identifier(
-				esTreeNode.id,
-				this,
-				this.scope.parent
+			this.id = <Identifier>(
+				new this.context.nodeConstructors.Identifier(esTreeNode.id, this, this.scope.parent)
 			);
 		}
 		super.parseNode(esTreeNode);
 	}
 
 	render(code: MagicString, options: RenderOptions) {
-		if (options.format === 'system' && this.id && this.id.variable.exportName) {
+		if (options.finaliser.name === 'system' && this.id && this.id.variable.exportName) {
 			code.appendLeft(
 				this.end,
 				` exports('${this.id.variable.exportName}', ${this.id.variable.getName()});`
