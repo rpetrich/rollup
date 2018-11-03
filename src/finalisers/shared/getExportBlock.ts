@@ -1,4 +1,4 @@
-import { ChunkDependencies, ChunkExports } from '../../Chunk';
+import { ChunkDependencies, ChunkExports } from '../../rollup/types';
 
 export default function getExportBlock(
 	exports: ChunkExports,

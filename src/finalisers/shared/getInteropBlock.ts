@@ -1,10 +1,9 @@
-import { ModuleDeclarationDependency } from '../../Chunk';
-import { OutputOptions } from '../../rollup/types';
+import { ModuleDeclarationDependency, OutputOptions } from '../../rollup/types';
 
 export default function getInteropBlock(
 	dependencies: ModuleDeclarationDependency[],
 	options: OutputOptions,
-	varOrConst: string
+	preferConst: boolean
 ) {
 	return dependencies
 		.map(({ name, exportsNames, exportsDefault, namedExportsMode }) => {
@@ -13,6 +12,7 @@ export default function getInteropBlock(
 			if (!exportsDefault || options.interop === false) return null;
 
 			if (exportsNames) {
+				const varOrConst = preferConst ? 'const' : 'var';
 				if (options.compact)
 					return `${varOrConst} ${name}__default='default'in ${name}?${name}['default']:${name};`;
 				return `${varOrConst} ${name}__default = 'default' in ${name} ? ${name}['default'] : ${name};`;

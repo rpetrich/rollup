@@ -1,5 +1,6 @@
 import MagicString from 'magic-string';
 import { Node, StatementNode } from '../ast/nodes/shared/Node';
+import { Finaliser } from '../rollup/types';
 
 export interface RenderOptions {
 	compact: boolean;
@@ -7,7 +8,7 @@ export interface RenderOptions {
 	esModule: boolean;
 	namespaceToStringTag: boolean;
 	indent: string;
-	format: string;
+	finaliser: Finaliser;
 }
 
 export interface NodeRenderOptions {

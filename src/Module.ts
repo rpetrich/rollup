@@ -303,7 +303,7 @@ export default class Module {
 			traceVariable: this.traceVariable.bind(this),
 			treeshake: this.graph.treeshake,
 			usesTopLevelAwait: false,
-			varOrConst: this.graph.varOrConst,
+			varOrConst: this.graph.preferConst ? 'const' : 'var',
 			warn: this.warn.bind(this)
 		};
 

@@ -1,15 +1,37 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import MagicString from 'magic-string';
+import { FinaliserDynamicImportOptions, FinaliserOptions, OutputOptions } from '../rollup/types';
 import { compactEsModuleExport, esModuleExport } from './shared/esModuleExport';
-import getExportBlock from './shared/getExportBlock';
 import getInteropBlock from './shared/getInteropBlock';
 import warnOnBuiltins from './shared/warnOnBuiltins';
 
-export default function amd(
+export const name = 'amd';
+export const supportsCodeSplitting = true;
+
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ interop, compact, resolution, importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	const _ = compact ? '' : ' ';
+	const resolve = compact ? 'c' : 'resolve';
+	const reject = compact ? 'e' : 'reject';
+	let left;
+	let right;
+	if (interop) {
+		left = `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`;
+		right = `],${_}function${_}(m)${_}{${_}${resolve}({${_}default:${_}m${_}})${_}},${_}${reject})${_}})`;
+	} else {
+		left = `new Promise(function${_}(${resolve},${_}${reject})${_}{${_}require([`;
+		right = `],${_}${resolve},${_}${reject})${_}})`;
+	}
+	magicString.overwrite(importRange.start, argumentRange.start, left);
+	magicString.overwrite(argumentRange.end, importRange.end, right);
+	magicString.overwrite(argumentRange.start, argumentRange.end, resolution);
+}
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		namedExportsMode,
 		hasExports,
 		indentString,
@@ -18,12 +40,14 @@ export default function amd(
 		dynamicImport,
 		needsAmdModule,
 		dependencies,
-		exports,
-		isEntryModuleFacade
+		isEntryModuleFacade,
+		preferConst,
+		onwarn,
+		generateExportBlock
 	}: FinaliserOptions,
 	options: OutputOptions
 ) {
-	warnOnBuiltins(graph, dependencies);
+	warnOnBuiltins(onwarn, dependencies);
 
 	const deps = dependencies.map(m => `'${m.id}'`);
 	const args = dependencies.map(m => m.name);
@@ -58,18 +82,12 @@ export default function amd(
 	)})${_}{${useStrict}${n}${n}`;
 
 	// var foo__default = 'default' in foo ? foo['default'] : foo;
-	const interopBlock = getInteropBlock(dependencies, options, graph.varOrConst);
+	const interopBlock = getInteropBlock(dependencies, options, preferConst);
 	if (interopBlock) magicString.prepend(interopBlock + n + n);
 
 	if (intro) magicString.prepend(intro);
 
-	const exportBlock = getExportBlock(
-		exports,
-		dependencies,
-		namedExportsMode,
-		options.interop,
-		options.compact
-	);
+	const exportBlock = generateExportBlock();
 	if (exportBlock) magicString.append(n + n + exportBlock);
 	if (namedExportsMode && hasExports && isEntryModuleFacade && options.esModule)
 		magicString.append(`${n}${n}${options.compact ? compactEsModuleExport : esModuleExport}`);

@@ -1,4 +1,4 @@
-import { ModuleDeclarationDependency } from '../../Chunk';
+import { ModuleDeclarationDependency } from '../../rollup/types';
 
 export default function trimEmptyImports(dependencies: ModuleDeclarationDependency[]) {
 	let i = dependencies.length;

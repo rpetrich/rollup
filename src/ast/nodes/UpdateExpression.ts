@@ -35,7 +35,14 @@ export default class UpdateExpression extends NodeBase {
 	render(code: MagicString, options: RenderOptions) {
 		this.argument.render(code, options);
 		const variable = this.argument.variable;
-		if (options.format === 'system' && variable && variable.exportName) {
+		if (variable && variable.exportName && options.finaliser.finaliseExportUpdate) {
+			options.finaliser.finaliseExportUpdate(code, {
+				localName: variable.getName(),
+				exportName: variable.exportName,
+				operator: this.operator,
+				prefix: this.prefix,
+				range: this
+			});
 			const name = variable.getName();
 			if (this.prefix) {
 				code.overwrite(

@@ -1,6 +1,6 @@
 import Chunk from './Chunk';
 import ExternalModule from './ExternalModule';
-import { OutputOptions } from './rollup/types';
+import { Finaliser, OutputOptions } from './rollup/types';
 
 /*
  * Given a chunk list, perform optimizations on that chunk list
@@ -13,6 +13,7 @@ import { OutputOptions } from './rollup/types';
 export function optimizeChunks(
 	chunks: Chunk[],
 	options: OutputOptions,
+	finaliser: Finaliser,
 	CHUNK_GROUPING_SIZE: number,
 	inputBase: string
 ): Chunk[] {
@@ -120,7 +121,7 @@ export function optimizeChunks(
 			if (optimizedChunkIndex <= chunkIndex) chunkIndex--;
 			chunks.splice(optimizedChunkIndex, 1);
 
-			lastChunk.merge(chunk, chunks, options, inputBase);
+			lastChunk.merge(chunk, chunks, options, finaliser, inputBase);
 
 			execGroup.splice(--execGroupIndex, 1);
 

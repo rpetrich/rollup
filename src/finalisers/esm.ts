@@ -1,10 +1,15 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { FinaliserOptions } from './index';
 
 export * from 'magic-string';
-import { OutputOptions } from '../rollup/types';
+import { FinaliserOptions, OutputOptions } from '../rollup/types';
 
-export default function esm(
+export const name = 'es';
+export const supportsCodeSplitting = true;
+export const supportsTopLevelAwait = true;
+export const manglesInternalExports = true;
+export const emitsImportsAsIdentifiers = true;
+
+export function finalise(
 	magicString: MagicStringBundle,
 	{ intro, outro, dependencies, exports }: FinaliserOptions,
 	options: OutputOptions

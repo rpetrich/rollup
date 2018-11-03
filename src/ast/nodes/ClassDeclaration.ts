@@ -22,21 +22,24 @@ export default class ClassDeclaration extends ClassNode {
 
 	parseNode(esTreeNode: GenericEsTreeNode) {
 		if (esTreeNode.id !== null) {
-			this.id = <Identifier>new this.context.nodeConstructors.Identifier(
-				esTreeNode.id,
-				this,
-				this.scope.parent
+			this.id = <Identifier>(
+				new this.context.nodeConstructors.Identifier(esTreeNode.id, this, this.scope.parent)
 			);
 		}
 		super.parseNode(esTreeNode);
 	}
 
 	render(code: MagicString, options: RenderOptions) {
-		if (options.format === 'system' && this.id && this.id.variable.exportName) {
-			code.appendLeft(
-				this.end,
-				` exports('${this.id.variable.exportName}', ${this.id.variable.getName()});`
-			);
+		if (
+			this.id &&
+			this.id.variable.exportName &&
+			options.finaliser.finaliseExportClassDeclaration
+		) {
+			options.finaliser.finaliseExportClassDeclaration(code, {
+				localName: this.id.variable.getName(),
+				exportName: this.id.variable.exportName,
+				range: this
+			});
 		}
 		super.render(code, options);
 	}

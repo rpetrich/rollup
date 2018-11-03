@@ -1,7 +1,76 @@
 import { Bundle as MagicStringBundle } from 'magic-string';
-import { ModuleDeclarations } from '../Chunk';
-import { OutputOptions } from '../rollup/types';
-import { FinaliserOptions } from './index';
+import MagicString from 'magic-string';
+import {
+	FinaliserDynamicImportOptions,
+	FinaliserExportAssignmentOptions,
+	FinaliserExportClassDeclarationOptions,
+	FinaliserExportUpdateOptions,
+	FinaliserOptions,
+	ModuleDeclarations,
+	OutputOptions
+} from '../rollup/types';
+
+export const name = 'system';
+export const supportsCodeSplitting = true;
+export const supportsTopLevelAwait = true;
+export const manglesInternalExports = true;
+export const emitsImportsAsIdentifiers = true;
+export const reservedIdentifiers = ['_setter', '_starExcludes', '_$p'];
+
+export function finaliseDynamicImport(
+	magicString: MagicString,
+	{ resolution, importRange, argumentRange }: FinaliserDynamicImportOptions
+) {
+	magicString.overwrite(importRange.start, argumentRange.start, 'module.import(');
+	magicString.overwrite(argumentRange.end, importRange.end, ')');
+	magicString.overwrite(argumentRange.start, argumentRange.end, resolution);
+}
+
+export function finaliseExportAssignment(
+	magicString: MagicString,
+	{ exportName, leftRange, rightRange }: FinaliserExportAssignmentOptions
+) {
+	magicString.prependLeft(
+		magicString.original.indexOf('=', leftRange.end) + 1,
+		` exports('${exportName}',`
+	);
+	magicString.prependRight(rightRange.end, `)`);
+}
+
+export function finaliseExportUpdate(
+	magicString: MagicString,
+	{ localName, exportName, operator, prefix, range }: FinaliserExportUpdateOptions
+) {
+	if (prefix) {
+		magicString.overwrite(
+			range.start,
+			range.end,
+			`exports('${exportName}', ${operator}${localName})`
+		);
+	} else {
+		let op;
+		switch (operator) {
+			case '++':
+				op = `${localName} + 1`;
+				break;
+			case '--':
+				op = `${localName} - 1`;
+				break;
+		}
+		magicString.overwrite(
+			range.start,
+			range.end,
+			`(exports('${exportName}', ${op}), ${localName}${operator})`
+		);
+	}
+}
+
+export function finaliseExportClassDeclaration(
+	magicString: MagicString,
+	{ localName, exportName, range }: FinaliserExportClassDeclarationOptions
+) {
+	magicString.appendLeft(range.end, ` exports('${exportName}', ${localName});`);
+}
 
 function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	const starExcludes = new Set(exports.map(expt => expt.exported));
@@ -17,15 +86,15 @@ function getStarExcludes({ dependencies, exports }: ModuleDeclarations) {
 	return starExcludes;
 }
 
-export default function system(
+export function finalise(
 	magicString: MagicStringBundle,
 	{
-		graph,
 		indentString: t,
 		intro,
 		outro,
 		dependencies,
 		exports,
+		preferConst,
 		usesTopLevelAwait
 	}: FinaliserOptions,
 	options: OutputOptions
@@ -38,7 +107,7 @@ export default function system(
 	const importBindings: string[] = [];
 	let starExcludes: Set<string>;
 	const setters: string[] = [];
-	const varOrConst = graph.varOrConst;
+	const varOrConst = preferConst ? 'const' : 'var';
 
 	dependencies.forEach(({ imports, reexports }) => {
 		const setter: string[] = [];

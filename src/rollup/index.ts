@@ -1,5 +1,6 @@
 import Chunk from '../Chunk';
 import { optimizeChunks } from '../chunk-optimization';
+import finalisers from '../finalisers/index';
 import Graph from '../Graph';
 import { createAddons } from '../utils/addons';
 import { createAssetPluginHooks, finaliseAsset } from '../utils/assetHooks';
@@ -14,6 +15,7 @@ import { SOURCEMAPPING_URL } from '../utils/sourceMappingURL';
 import { getTimings, initialiseTimers, timeEnd, timeStart } from '../utils/timers';
 import { Watcher } from '../watch';
 import {
+	Finaliser,
 	InputOptions,
 	OutputBundle,
 	OutputChunk,
@@ -159,6 +161,14 @@ export function setWatcher(watcher: Watcher) {
 	curWatcher = watcher;
 }
 
+function isFinaliser(value: any): value is Finaliser {
+	return (
+		typeof value === 'object' &&
+		typeof value.name === 'string' &&
+		typeof value.finalise === 'function'
+	);
+}
+
 export default function rollup(
 	rawInputOptions: GenericConfigObject
 ): Promise<RollupSingleFileBuild | RollupBuild> {
@@ -222,6 +232,17 @@ export default function rollup(
 				function generate(rawOutputOptions: GenericConfigObject, isWrite: boolean) {
 					const outputOptions = normalizeOutputOptions(inputOptions, rawOutputOptions);
 
+					const format = outputOptions.format;
+					const finaliser = typeof format === 'string' ? finalisers[format] : format;
+					if (!isFinaliser(finaliser)) {
+						error({
+							code: 'INVALID_OPTION',
+							message: `Invalid format: ${format} - valid options are ${Object.keys(
+								finalisers
+							).join(', ')}`
+						});
+					}
+
 					if (inputOptions.experimentalCodeSplitting) {
 						if (typeof outputOptions.file === 'string' && typeof outputOptions.dir === 'string')
 							error({
@@ -230,11 +251,12 @@ export default function rollup(
 									'Build must set either output.file for a single-file build or output.dir when generating multiple chunks.'
 							});
 						if (chunks.length > 1) {
-							if (outputOptions.format === 'umd' || outputOptions.format === 'iife')
+							if (!finaliser.supportsCodeSplitting)
 								error({
 									code: 'INVALID_OPTION',
-									message:
-										'UMD and IIFE output formats are not supported with the experimentalCodeSplitting option.'
+									message: `${
+										finaliser.name
+									} output format does not support the experimentalCodeSplitting option.`
 								});
 
 							if (outputOptions.sourcemapFile)
@@ -272,15 +294,21 @@ export default function rollup(
 							// pre-render all chunks
 							for (const chunk of chunks) {
 								if (!inputOptions.experimentalPreserveModules)
-									chunk.generateInternalExports(outputOptions);
+									chunk.generateInternalExports(outputOptions, finaliser);
 								if (chunk.isEntryModuleFacade)
 									chunk.exportMode = getExportMode(chunk, outputOptions);
 							}
 							for (const chunk of chunks) {
-								chunk.preRender(outputOptions, inputBase);
+								chunk.preRender(outputOptions, finaliser, inputBase);
 							}
 							if (!optimized && inputOptions.optimizeChunks) {
-								optimizeChunks(chunks, outputOptions, inputOptions.chunkGroupingSize, inputBase);
+								optimizeChunks(
+									chunks,
+									outputOptions,
+									finaliser,
+									inputOptions.chunkGroupingSize,
+									inputBase
+								);
 								optimized = true;
 							}
 
@@ -310,7 +338,7 @@ export default function rollup(
 										pattern = outputOptions.chunkFileNames || '[name]-[hash].js';
 										patternName = 'output.chunkFileNames';
 									}
-									chunk.generateId(pattern, patternName, addons, outputOptions, usedIds);
+									chunk.generateId(pattern, patternName, addons, finaliser, usedIds);
 									usedIds[chunk.id] = true;
 								}
 							}
@@ -333,15 +361,17 @@ export default function rollup(
 							return Promise.all(
 								chunks.map(chunk => {
 									const outputChunk = <OutputChunk>outputBundle[chunk.id];
-									return chunk.render(outputOptions, addons, outputChunk).then(rendered => {
-										outputChunk.code = rendered.code;
-										outputChunk.map = rendered.map;
+									return chunk
+										.render(outputOptions, addons, finaliser, outputChunk)
+										.then(rendered => {
+											outputChunk.code = rendered.code;
+											outputChunk.map = rendered.map;
 
-										return graph.pluginDriver.hookParallel('ongenerate', [
-											{ bundle: outputChunk, ...outputOptions },
-											outputChunk
-										]);
-									});
+											return graph.pluginDriver.hookParallel('ongenerate', [
+												{ bundle: outputChunk, ...outputOptions },
+												outputChunk
+											]);
+										});
 								})
 							).then(() => {});
 						})

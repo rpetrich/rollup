@@ -47,12 +47,17 @@ export default class AssignmentExpression extends NodeBase {
 	render(code: MagicString, options: RenderOptions) {
 		this.left.render(code, options);
 		this.right.render(code, options);
-		if (options.format === 'system' && this.left.variable && this.left.variable.exportName) {
-			code.prependLeft(
-				code.original.indexOf('=', this.left.end) + 1,
-				` exports('${this.left.variable.exportName}',`
-			);
-			code.prependRight(this.right.end, `)`);
+		if (
+			this.left.variable &&
+			this.left.variable.exportName &&
+			options.finaliser.finaliseExportAssignment
+		) {
+			options.finaliser.finaliseExportAssignment(code, {
+				localName: this.left.variable.getName(),
+				exportName: this.left.variable.exportName,
+				leftRange: this.left,
+				rightRange: this.right
+			});
 		}
 	}
 }
