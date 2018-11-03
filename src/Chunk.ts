@@ -12,7 +12,13 @@ import ExternalModule from './ExternalModule';
 import finalisers from './finalisers/index';
 import Graph from './Graph';
 import Module from './Module';
-import { GlobalsOption, OutputOptions, RawSourceMap, RenderedModule } from './rollup/types';
+import {
+	GlobalsOption,
+	OutputOptions,
+	RawSourceMap,
+	RenderedChunk,
+	RenderedModule
+} from './rollup/types';
 import { Addons } from './utils/addons';
 import { toBase64 } from './utils/base64';
 import collapseSourcemaps from './utils/collapseSourcemaps';
@@ -20,10 +26,10 @@ import error from './utils/error';
 import getIndentString from './utils/getIndentString';
 import { makeLegal } from './utils/identifierHelpers';
 import { basename, dirname, normalize, relative, resolve } from './utils/path';
+import renderChunk from './utils/renderChunk';
 import { RenderOptions } from './utils/renderHelpers';
 import { makeUnique, renderNamePattern } from './utils/renderNamePattern';
 import { timeEnd, timeStart } from './utils/timers';
-import transformChunk from './utils/transformChunk';
 
 export interface ModuleDeclarations {
 	exports: ChunkExports;
@@ -68,8 +74,17 @@ function getGlobalName(
 	graph: Graph,
 	hasExports: boolean
 ) {
-	if (typeof globals === 'function') return globals(module.id);
-	if (globals) return globals[module.id];
+	let globalName: string | undefined;
+	if (typeof globals === 'function') {
+		globalName = globals(module.id);
+	} else if (globals) {
+		globalName = globals[module.id];
+	}
+
+	if (globalName) {
+		return globalName;
+	}
+
 	if (hasExports) {
 		graph.warn({
 			code: 'MISSING_GLOBAL_NAME',
@@ -81,6 +96,10 @@ function getGlobalName(
 		});
 		return module.name;
 	}
+}
+
+function isNamespaceVariable(variable: Variable): variable is NamespaceVariable | ExternalVariable {
+	return variable.isNamespace;
 }
 
 export default class Chunk {
@@ -228,7 +247,10 @@ export default class Chunk {
 		const tracedExports: { variable: Variable; module: Module | ExternalModule }[] = [];
 		for (const [index, exportName] of entryExportEntries) {
 			const traced = this.traceExport(exportName, this.entryModule);
-			if (traced.variable && !traced.variable.included && !traced.variable.isExternal) {
+			if (
+				!traced ||
+				(traced.variable && !traced.variable.included && !traced.variable.isExternal)
+			) {
 				continue;
 			}
 			tracedExports[index] = traced;
@@ -273,13 +295,10 @@ export default class Chunk {
 	private traceImport(exportName: string, module: Module | ExternalModule) {
 		const traced = this.traceExport(exportName, module);
 
-		// ignore imports to modules already in this chunk
-		if (!traced || traced.module.chunk === this) {
-			return traced;
-		}
+		if (!traced) return;
 
 		// namespace variable can indicate multiple imports
-		if (traced.variable.isNamespace) {
+		if (isNamespaceVariable(traced.variable)) {
 			const namespaceVariables =
 				(<NamespaceVariable>traced.variable).originals ||
 				(<ExternalVariable>traced.variable).module.declarations;
@@ -287,22 +306,24 @@ export default class Chunk {
 			for (const importName of Object.keys(namespaceVariables)) {
 				const original = namespaceVariables[importName];
 				if (original.included) {
-					if (traced.module.chunk) {
-						traced.module.chunk.exports.set(original, traced.module);
+					// namespace exports could be imported themselves, so retrace
+					// this handles recursive namespace exported on namespace cases as well
+					if (traced.variable.module instanceof Module) {
+						this.traceImport(importName, traced.variable.module);
+					} else {
+						const externalVariable = traced.variable.module.traceExport(importName);
+						if (externalVariable.included) this.imports.set(original, traced.variable.module);
 					}
-					this.imports.set(original, traced.module);
 				}
 			}
 		}
 
-		if (!traced.variable.included) {
-			return traced;
-		}
+		// ignore unincluded or imports to modules already in this chunk
+		if (traced.module.chunk === this || !traced.variable.included) return traced;
 
 		this.imports.set(traced.variable, traced.module);
-		if (traced.module instanceof Module) {
+		if (traced.module instanceof Module)
 			traced.module.chunk.exports.set(traced.variable, traced.module);
-		}
 		return traced;
 	}
 
@@ -314,8 +335,8 @@ export default class Chunk {
 	): {
 		variable: Variable;
 		module: Module | ExternalModule;
-	} {
-		if (name === '*' || module instanceof ExternalModule) {
+	} | void {
+		if (name[0] === '*' || module instanceof ExternalModule) {
 			return { variable: module.traceExport(name), module };
 		}
 
@@ -345,11 +366,6 @@ export default class Chunk {
 
 		if (name === 'default') {
 			return;
-		}
-
-		// external star exports
-		if (name[0] === '*') {
-			return { variable: undefined, module: this.graph.moduleById.get(name.substr(1)) };
 		}
 
 		// resolve known star exports
@@ -1000,6 +1016,8 @@ export default class Chunk {
 		const outName = makeUnique(
 			renderNamePattern(pattern, patternName, type => {
 				switch (type) {
+					case 'format':
+						return options.format === 'es' ? 'esm' : options.format;
 					case 'hash':
 						return this.computeFullHash(addons, options);
 					case 'name':
@@ -1016,7 +1034,7 @@ export default class Chunk {
 		this.id = outName;
 	}
 
-	render(options: OutputOptions, addons: Addons) {
+	render(options: OutputOptions, addons: Addons, outputChunk: RenderedChunk) {
 		timeStart('render format', 3);
 
 		if (!this.renderedSource)
@@ -1094,35 +1112,41 @@ export default class Chunk {
 		let map: SourceMap = null;
 		const chunkSourcemapChain: RawSourceMap[] = [];
 
-		return transformChunk(this.graph, this, prevCode, chunkSourcemapChain, options).then(
-			(code: string) => {
-				if (options.sourcemap) {
-					timeStart('sourcemap', 3);
+		return renderChunk({
+			graph: this.graph,
+			chunk: this,
+			renderChunk: outputChunk,
+			code: prevCode,
+			sourcemapChain: chunkSourcemapChain,
+			options
+		}).then((code: string) => {
+			if (options.sourcemap) {
+				timeStart('sourcemap', 3);
 
-					let file: string;
-					if (options.file) file = resolve(options.sourcemapFile || options.file);
-					else if (options.dir) file = resolve(options.dir, this.id);
-					else file = resolve(this.id);
+				let file: string;
+				if (options.file) file = resolve(options.sourcemapFile || options.file);
+				else if (options.dir) file = resolve(options.dir, this.id);
+				else file = resolve(this.id);
 
-					if (
-						this.graph.hasLoaders ||
-						this.graph.plugins.find(plugin => Boolean(plugin.transform || plugin.transformBundle))
-					) {
-						const decodedMap = magicString.generateDecodedMap({});
-						map = collapseSourcemaps(this, file, decodedMap, this.usedModules, chunkSourcemapChain);
-					} else {
-						map = magicString.generateMap({ file, includeContent: true });
-					}
-
-					map.sources = map.sources.map(normalize);
-
-					timeEnd('sourcemap', 3);
+				if (this.graph.pluginDriver.hasLoadersOrTransforms) {
+					const decodedMap = magicString.generateDecodedMap({});
+					map = collapseSourcemaps(this, file, decodedMap, this.usedModules, chunkSourcemapChain);
+				} else {
+					map = magicString.generateMap({ file, includeContent: true });
 				}
 
-				if (options.compact !== true && code[code.length - 1] !== '\n') code += '\n';
+				map.sources = map.sources.map(sourcePath =>
+					normalize(
+						options.sourcemapPathTransform ? options.sourcemapPathTransform(sourcePath) : sourcePath
+					)
+				);
 
-				return { code, map };
+				timeEnd('sourcemap', 3);
 			}
-		);
+
+			if (options.compact !== true && code[code.length - 1] !== '\n') code += '\n';
+
+			return { code, map };
+		});
 	}
 }

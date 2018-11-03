@@ -15,7 +15,6 @@ export function handleError(err: RollupError, recover = false) {
 
 	stderr(tc.bold.red(`[!] ${tc.bold(message.toString())}`));
 
-	// TODO should this be "err.url || (err.file && err.loc.file) || err.id"?
 	if (err.url) {
 		stderr(tc.cyan(err.url));
 	}
@@ -28,7 +27,9 @@ export function handleError(err: RollupError, recover = false) {
 
 	if (err.frame) {
 		stderr(tc.dim(err.frame));
-	} else if (err.stack) {
+	}
+
+	if (err.stack) {
 		stderr(tc.dim(err.stack));
 	}
 

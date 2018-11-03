@@ -36,12 +36,10 @@ export default class VariableDeclaration extends NodeBase {
 	}
 
 	includeWithAllDeclaredVariables() {
-		let anotherPassNeeded = false;
 		this.included = true;
 		for (const declarator of this.declarations) {
-			if (declarator.include()) anotherPassNeeded = true;
+			declarator.include();
 		}
-		return anotherPassNeeded;
 	}
 
 	include() {
@@ -132,8 +130,8 @@ export default class VariableDeclaration extends NodeBase {
 					node.id.variable.exportName
 				) {
 					code.prependLeft(
-						node.init.start,
-						`exports('${node.id.variable.safeExportName || node.id.variable.exportName}', `
+						code.original.indexOf('=', node.id.end) + 1,
+						` exports('${node.id.variable.safeExportName || node.id.variable.exportName}',`
 					);
 					nextSeparatorString += ')';
 				}

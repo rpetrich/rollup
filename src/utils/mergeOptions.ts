@@ -1,6 +1,5 @@
 import { InputOptions, OutputOptions, WarningHandler } from '../rollup/types';
 import deprecateOptions, { Deprecation } from './deprecateOptions';
-import ensureArray from './ensureArray';
 
 export interface GenericConfigObject {
 	[key: string]: any;
@@ -104,7 +103,8 @@ export default function mergeOptions({
 		Object.assign(command, command.output);
 	}
 
-	const normalizedOutputOptions = ensureArray(config.output);
+	const output = config.output;
+	const normalizedOutputOptions = Array.isArray(output) ? output : output ? [output] : [];
 	if (normalizedOutputOptions.length === 0) normalizedOutputOptions.push({});
 	const outputOptions = normalizedOutputOptions.map(singleOutputOptions =>
 		getOutputOptions(singleOutputOptions, command)
@@ -128,11 +128,14 @@ export default function mergeOptions({
 		'output option'
 	);
 
+	const validCliOutputOptions = validOutputOptions.filter(
+		option => option !== 'sourcemapPathTransform'
+	);
 	addUnknownOptionErrors(
 		unknownOptionErrors,
 		Object.keys(command),
 		validInputOptions.concat(
-			validOutputOptions,
+			validCliOutputOptions,
 			Object.keys(commandAliases),
 			'config',
 			'environment',
@@ -199,6 +202,7 @@ function getInputOptions(
 		acorn: config.acorn,
 		acornInjectPlugins: config.acornInjectPlugins,
 		cache: getOption('cache'),
+		experimentalCacheExpiry: getOption('experimentalCacheExpiry', 10),
 		context: config.context,
 		experimentalCodeSplitting: getOption('experimentalCodeSplitting'),
 		experimentalPreserveModules: getOption('experimentalPreserveModules'),
@@ -269,6 +273,7 @@ function getOutputOptions(
 		paths: getOption('paths'),
 		sourcemap: getOption('sourcemap'),
 		sourcemapFile: getOption('sourcemapFile'),
+		sourcemapPathTransform: getOption('sourcemapPathTransform'),
 		strict: getOption('strict', true)
 	};
 }

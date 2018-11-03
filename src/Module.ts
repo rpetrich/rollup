@@ -7,8 +7,6 @@ import ExportDefaultDeclaration, {
 	isExportDefaultDeclaration
 } from './ast/nodes/ExportDefaultDeclaration';
 import ExportNamedDeclaration from './ast/nodes/ExportNamedDeclaration';
-import FunctionDeclaration from './ast/nodes/FunctionDeclaration';
-import Identifier from './ast/nodes/Identifier';
 import Import from './ast/nodes/Import';
 import ImportDeclaration from './ast/nodes/ImportDeclaration';
 import ImportSpecifier from './ast/nodes/ImportSpecifier';
@@ -30,7 +28,6 @@ import Chunk from './Chunk';
 import ExternalModule from './ExternalModule';
 import Graph from './Graph';
 import { Asset, IdMap, ModuleJSON, RawSourceMap, RollupError, RollupWarning } from './rollup/types';
-import { handleMissingExport } from './utils/defaults';
 import error from './utils/error';
 import getCodeFrame from './utils/getCodeFrame';
 import { getOriginalLocation } from './utils/getOriginalLocation';
@@ -102,7 +99,7 @@ export interface AstContext {
 
 export const defaultAcornOptions: AcornOptions = {
 	// TODO TypeScript waiting for acorn types to be updated
-	ecmaVersion: <any>2018,
+	ecmaVersion: <any>2019,
 	sourceType: 'module',
 	preserveParens: false
 };
@@ -116,10 +113,16 @@ function tryParse(module: Module, parse: IParse, acornOptions: AcornOptions) {
 				module.comments.push({ block, text, start, end })
 		});
 	} catch (err) {
+		let message = err.message.replace(/ \(\d+:\d+\)$/, '');
+		if (module.id.endsWith('.json')) {
+			message += ' (Note that you need rollup-plugin-json to import JSON files)';
+		} else if (!module.id.endsWith('.js')) {
+			message += ' (Note that you need plugins to import files that are not JavaScript)';
+		}
 		module.error(
 			{
 				code: 'PARSE_ERROR',
-				message: err.message.replace(/ \(\d+:\d+\)$/, '')
+				message
 			},
 			err.pos
 		);
@@ -142,6 +145,22 @@ function includeFully(node: Node) {
 			includeFully(value);
 		}
 	}
+}
+
+function handleMissingExport(
+	exportName: string,
+	importingModule: Module,
+	importedModule: string,
+	importerStart?: number
+) {
+	importingModule.error(
+		{
+			code: 'MISSING_EXPORT',
+			message: `'${exportName}' is not exported by ${relativeId(importedModule)}`,
+			url: `https://rollupjs.org/guide/en#error-name-is-not-exported-by-module-`
+		},
+		importerStart
+	);
 }
 
 export default class Module {
@@ -171,6 +190,7 @@ export default class Module {
 		resolution: Module | ExternalModule | string | void;
 	}[];
 	transformAssets: Asset[];
+	customTransformCache: boolean;
 
 	execIndex: number;
 	isEntryPoint: boolean;
@@ -226,13 +246,15 @@ export default class Module {
 		ast,
 		sourcemapChain,
 		resolvedIds,
-		transformDependencies
+		transformDependencies,
+		customTransformCache
 	}: ModuleJSON) {
 		this.code = code;
 		this.originalCode = originalCode;
 		this.originalSourcemap = originalSourcemap;
 		this.sourcemapChain = sourcemapChain;
 		this.transformDependencies = transformDependencies;
+		this.customTransformCache = customTransformCache;
 
 		timeStart('generate ast', 3);
 
@@ -262,7 +284,7 @@ export default class Module {
 			code, // Only needed for debugging
 			error: this.error.bind(this),
 			fileName, // Needed for warnings
-			getAssetFileName: this.graph.pluginContext.getAssetFileName,
+			getAssetFileName: this.graph.pluginDriver.getAssetFileName,
 			getExports: this.getExports.bind(this),
 			getReexports: this.getReexports.bind(this),
 			getModuleExecIndex: () => this.execIndex,
@@ -342,10 +364,6 @@ export default class Module {
 			// export default function foo () {}
 			// export default foo;
 			// export default 42;
-			const identifier =
-				((<FunctionDeclaration>node.declaration).id &&
-					(<FunctionDeclaration>node.declaration).id.name) ||
-				(<Identifier>node.declaration).name;
 			if (this.exports.default) {
 				this.error(
 					{
@@ -358,7 +376,7 @@ export default class Module {
 
 			this.exports.default = {
 				localName: 'default',
-				identifier,
+				identifier: node.variable.getOriginalVariableName(),
 				node
 			};
 		} else if ((<ExportNamedDeclaration>node).declaration) {
@@ -616,7 +634,7 @@ export default class Module {
 	getOrCreateNamespace(): NamespaceVariable {
 		if (this.namespaceVariable) return this.namespaceVariable;
 
-		return (this.namespaceVariable = new NamespaceVariable(this.astContext));
+		return (this.namespaceVariable = new NamespaceVariable(this.astContext, this));
 	}
 
 	private includeNamespace() {
@@ -657,7 +675,8 @@ export default class Module {
 			originalSourcemap: this.originalSourcemap,
 			ast: this.esTreeAst,
 			sourcemapChain: this.sourcemapChain,
-			resolvedIds: this.resolvedIds
+			resolvedIds: this.resolvedIds,
+			customTransformCache: this.customTransformCache
 		};
 	}
 

@@ -109,7 +109,9 @@ export default function watch(
 					break;
 
 				case 'START':
-					screenWriter(tc.underline(`rollup v${rollup.VERSION}`));
+					if (!silent) {
+						screenWriter(tc.underline(`rollup v${rollup.VERSION}`));
+					}
 					break;
 
 				case 'BUNDLE_START':
@@ -160,7 +162,6 @@ export default function watch(
 	// only listen to stdin if it is a pipe
 	if (!process.stdin.isTTY) {
 		process.stdin.on('end', close); // in case we ever support stdin!
-		process.stdin.resume();
 	}
 
 	function close(err: Error) {

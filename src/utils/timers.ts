@@ -3,7 +3,10 @@ import { InputOptions, SerializedTimings } from '../rollup/types';
 type StartTime = [number, number] | number;
 interface Timer {
 	time: number;
-	start: StartTime;
+	memory: number;
+	totalMemory: number;
+	startTime: StartTime;
+	startMemory: number;
 }
 interface Timers {
 	[label: string]: Timer;
@@ -13,6 +16,7 @@ const NOOP = () => {};
 
 let getStartTime: () => StartTime = () => 0;
 let getElapsedTime: (previous: StartTime) => number = () => 0;
+let getMemory: () => number = () => 0;
 
 let timers: Timers = {};
 
@@ -25,6 +29,9 @@ function setTimeHelpers() {
 	} else if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
 		getStartTime = performance.now.bind(performance);
 		getElapsedTime = (previous: number) => performance.now() - previous;
+	}
+	if (typeof process !== 'undefined' && typeof process.memoryUsage === 'function') {
+		getMemory = () => process.memoryUsage().heapUsed;
 	}
 }
 
@@ -45,24 +52,32 @@ function timeStartImpl(label: string, level: number = 3) {
 	label = getPersistedLabel(label, level);
 	if (!timers.hasOwnProperty(label)) {
 		timers[label] = {
-			start: undefined,
-			time: 0
+			totalMemory: 0,
+			startTime: undefined,
+			startMemory: undefined,
+			time: 0,
+			memory: 0
 		};
 	}
-	timers[label].start = getStartTime();
+	const currentMemory = getMemory();
+	timers[label].startTime = getStartTime();
+	timers[label].startMemory = currentMemory;
 }
 
 function timeEndImpl(label: string, level: number = 3) {
 	label = getPersistedLabel(label, level);
 	if (timers.hasOwnProperty(label)) {
-		timers[label].time += getElapsedTime(timers[label].start);
+		const currentMemory = getMemory();
+		timers[label].time += getElapsedTime(timers[label].startTime);
+		timers[label].totalMemory = Math.max(timers[label].totalMemory, currentMemory);
+		timers[label].memory += currentMemory - timers[label].startMemory;
 	}
 }
 
 export function getTimings(): SerializedTimings {
 	const newTimings: SerializedTimings = {};
 	Object.keys(timers).forEach(label => {
-		newTimings[label] = timers[label].time;
+		newTimings[label] = [timers[label].time, timers[label].memory, timers[label].totalMemory];
 	});
 	return newTimings;
 }

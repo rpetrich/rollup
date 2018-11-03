@@ -5,7 +5,6 @@ import { createAddons } from '../utils/addons';
 import { createAssetPluginHooks, finaliseAsset } from '../utils/assetHooks';
 import commondir from '../utils/commondir';
 import { Deprecation } from '../utils/deprecateOptions';
-import ensureArray from '../utils/ensureArray';
 import error from '../utils/error';
 import { writeFile } from '../utils/fs';
 import getExportMode from '../utils/getExportMode';
@@ -40,23 +39,23 @@ function addDeprecations(deprecations: Deprecation[], warn: WarningHandler) {
 function checkInputOptions(options: InputOptions) {
 	if (options.transform || options.load || options.resolveId || options.resolveExternal) {
 		throw new Error(
-			'The `transform`, `load`, `resolveId` and `resolveExternal` options are deprecated in favour of a unified plugin API. See https://github.com/rollup/rollup/wiki/Plugins for details'
+			'The `transform`, `load`, `resolveId` and `resolveExternal` options are deprecated in favour of a unified plugin API. See https://rollupjs.org/guide/en#plugins'
 		);
 	}
 }
 
 function checkOutputOptions(options: OutputOptions) {
-	if (options.format === 'es6') {
+	if (<string>options.format === 'es6') {
 		error({
 			message: 'The `es6` output format is deprecated – use `es` instead',
-			url: `https://rollupjs.org/#format-f-output-format-`
+			url: `https://rollupjs.org/guide/en#output-format-f-format`
 		});
 	}
 
 	if (!options.format) {
 		error({
 			message: `You must specify output.format, which can be one of 'amd', 'cjs', 'system', 'esm', 'iife' or 'umd'`,
-			url: `https://rollupjs.org/#format-f-output-format-`
+			url: `https://rollupjs.org/guide/en#output-format-f-format`
 		});
 	}
 
@@ -73,19 +72,8 @@ const throwAsyncGenerateError = {
 
 function applyOptionHook(inputOptions: InputOptions, plugin: Plugin) {
 	if (plugin.options) return plugin.options(inputOptions) || inputOptions;
+
 	return inputOptions;
-}
-
-function applyBuildStartHook(graph: Graph) {
-	return Promise.all(
-		graph.plugins.map(plugin => plugin.buildStart && plugin.buildStart.call(graph.pluginContext))
-	).then(() => {});
-}
-
-function applyBuildEndHook(graph: Graph, err?: any) {
-	return Promise.all(
-		graph.plugins.map(plugin => plugin.buildEnd && plugin.buildEnd.call(graph.pluginContext, err))
-	).then(() => {});
 }
 
 function getInputOptions(rawInputOptions: GenericConfigObject): any {
@@ -101,7 +89,12 @@ function getInputOptions(rawInputOptions: GenericConfigObject): any {
 	if (deprecations.length) addDeprecations(deprecations, inputOptions.onwarn);
 
 	checkInputOptions(inputOptions);
-	inputOptions.plugins = ensureArray(inputOptions.plugins);
+	const plugins = inputOptions.plugins;
+	inputOptions.plugins = Array.isArray(plugins)
+		? plugins.filter(Boolean)
+		: plugins
+			? [plugins]
+			: [];
 	inputOptions = inputOptions.plugins.reduce(applyOptionHook, inputOptions);
 
 	if (!inputOptions.experimentalCodeSplitting) {
@@ -176,9 +169,13 @@ export default function rollup(
 		const graph = new Graph(inputOptions, curWatcher);
 		curWatcher = undefined;
 
+		// remove the cache option from the memory after graph creation (cache is not used anymore)
+		delete inputOptions.cache;
+
 		timeStart('BUILD', 1);
 
-		return applyBuildStartHook(graph)
+		return graph.pluginDriver
+			.hookParallel('buildStart')
 			.then(() =>
 				graph.build(
 					inputOptions.input,
@@ -189,11 +186,11 @@ export default function rollup(
 			)
 			.then(
 				chunks =>
-					applyBuildEndHook(graph).then(() => {
+					graph.pluginDriver.hookParallel('buildEnd').then(() => {
 						return chunks;
 					}),
 				err =>
-					applyBuildEndHook(graph, err).then(() => {
+					graph.pluginDriver.hookParallel('buildEnd', [err]).then(() => {
 						throw err;
 					})
 			)
@@ -268,7 +265,9 @@ export default function rollup(
 						chunks.filter(chunk => chunk.entryModule).map(chunk => chunk.entryModule.id)
 					);
 
-					return createAddons(graph, outputOptions)
+					return graph.pluginDriver
+						.hookParallel('renderStart')
+						.then(() => createAddons(graph, outputOptions))
 						.then(addons => {
 							// pre-render all chunks
 							for (const chunk of chunks) {
@@ -285,12 +284,10 @@ export default function rollup(
 								optimized = true;
 							}
 
-							// then name all chunks
+							// name all chunks
+							const usedIds: Record<string, true> = {};
 							for (let i = 0; i < chunks.length; i++) {
 								const chunk = chunks[i];
-								const imports = chunk.getImportIds();
-								const exports = chunk.getExportNames();
-								const modules = chunk.renderedModules;
 
 								if (chunk === singleChunk) {
 									singleChunk.id = basename(
@@ -299,14 +296,6 @@ export default function rollup(
 												? inputOptions.input[0]
 												: <string>inputOptions.input)
 									);
-									const outputChunk: OutputChunk = {
-										imports,
-										exports,
-										modules,
-										code: undefined,
-										map: undefined
-									};
-									outputBundle[singleChunk.id] = outputChunk;
 								} else if (inputOptions.experimentalPreserveModules) {
 									chunk.generateIdPreserveModules(inputBase);
 								} else {
@@ -321,69 +310,69 @@ export default function rollup(
 										pattern = outputOptions.chunkFileNames || '[name]-[hash].js';
 										patternName = 'output.chunkFileNames';
 									}
-									chunk.generateId(pattern, patternName, addons, outputOptions, outputBundle);
+									chunk.generateId(pattern, patternName, addons, outputOptions, usedIds);
+									usedIds[chunk.id] = true;
 								}
+							}
+
+							// assign to outputBundle
+							for (let i = 0; i < chunks.length; i++) {
+								const chunk = chunks[i];
+
 								outputBundle[chunk.id] = {
-									imports,
-									exports,
-									modules,
+									fileName: chunk.id,
+									isEntry: chunk.entryModule !== undefined,
+									imports: chunk.getImportIds(),
+									exports: chunk.getExportNames(),
+									modules: chunk.renderedModules,
 									code: undefined,
 									map: undefined
 								};
 							}
 
-							// render chunk import statements and finalizer wrappers given known names
 							return Promise.all(
 								chunks.map(chunk => {
-									const chunkId = chunk.id;
-									return chunk.render(outputOptions, addons).then(rendered => {
-										const outputChunk = <OutputChunk>outputBundle[chunkId];
+									const outputChunk = <OutputChunk>outputBundle[chunk.id];
+									return chunk.render(outputOptions, addons, outputChunk).then(rendered => {
 										outputChunk.code = rendered.code;
 										outputChunk.map = rendered.map;
 
-										return Promise.all(
-											graph.plugins
-												.filter(plugin => plugin.ongenerate)
-												.map(plugin =>
-													plugin.ongenerate.call(
-														graph.pluginContext,
-														{ bundle: outputChunk, ...outputOptions },
-														outputChunk
-													)
-												)
-										);
+										return graph.pluginDriver.hookParallel('ongenerate', [
+											{ bundle: outputChunk, ...outputOptions },
+											outputChunk
+										]);
 									});
 								})
 							).then(() => {});
 						})
+						.catch(error =>
+							graph.pluginDriver.hookParallel('renderError', [error]).then(() => {
+								throw error;
+							})
+						)
 						.then(() => {
 							// run generateBundle hook
-							const generateBundlePlugins = graph.plugins.filter(plugin => plugin.generateBundle);
-							if (generateBundlePlugins.length === 0) return;
 
 							// assets emitted during generateBundle are unique to that specific generate call
 							const assets = new Map(graph.assetsById);
-							const generateBundleContext = {
-								...graph.pluginContext,
-								...createAssetPluginHooks(assets, outputBundle, assetFileNames)
-							};
+							const generateAssetPluginHooks = createAssetPluginHooks(
+								assets,
+								outputBundle,
+								assetFileNames
+							);
 
-							return Promise.all(
-								generateBundlePlugins.map(plugin =>
-									plugin.generateBundle.call(
-										generateBundleContext,
-										outputOptions,
-										outputBundle,
-										isWrite
-									)
-								)
-							).then(() => {
-								// throw errors for assets not finalised with a source
-								assets.forEach(asset => {
-									if (asset.fileName === undefined)
-										finaliseAsset(asset, outputBundle, assetFileNames);
+							return graph.pluginDriver
+								.hookSeq('generateBundle', [outputOptions, outputBundle, isWrite], context => ({
+									...context,
+									...generateAssetPluginHooks
+								}))
+								.then(() => {
+									// throw errors for assets not finalised with a source
+									assets.forEach(asset => {
+										if (asset.fileName === undefined)
+											finaliseAsset(asset, outputBundle, assetFileNames);
+									});
 								});
-							});
 						})
 						.then(() => {
 							timeEnd('GENERATE', 1);
@@ -391,9 +380,10 @@ export default function rollup(
 						});
 				}
 
-				const cache = graph.getCache();
+				const cache = rawInputOptions.cache === false ? undefined : graph.getCache();
 				const result: RollupSingleFileBuild | RollupBuild = {
 					cache,
+					watchFiles: Object.keys(graph.watchFiles),
 					generate: <any>((rawOutputOptions: GenericConfigObject) => {
 						const promise = generate(rawOutputOptions, false).then(
 							result =>
@@ -423,16 +413,22 @@ export default function rollup(
 								message: 'You must specify output.file.'
 							});
 						}
-						return generate(outputOptions, true).then(result =>
+						return generate(outputOptions, true).then(outputBundle =>
 							Promise.all(
-								Object.keys(result).map(chunkId => {
-									return writeOutputFile(graph, chunkId, result[chunkId], outputOptions);
+								Object.keys(outputBundle).map(chunkId => {
+									return writeOutputFile(
+										graph,
+										result,
+										chunkId,
+										outputBundle[chunkId],
+										outputOptions
+									);
 								})
 							).then(
 								() =>
 									inputOptions.experimentalCodeSplitting
-										? { output: result }
-										: <OutputChunk>result[chunks[0].id]
+										? { output: outputBundle }
+										: <OutputChunk>outputBundle[chunks[0].id]
 							)
 						);
 					})
@@ -440,7 +436,7 @@ export default function rollup(
 				if (!inputOptions.experimentalCodeSplitting) {
 					(<any>result).imports = (<Chunk>singleChunk).getImportIds();
 					(<any>result).exports = (<Chunk>singleChunk).getExportNames();
-					(<any>result).modules = cache.modules;
+					(<any>result).modules = (cache || graph.getCache()).modules;
 				}
 				if (inputOptions.perf === true) result.getTimings = getTimings;
 				return result;
@@ -456,6 +452,7 @@ function isOutputChunk(file: OutputFile): file is OutputChunk {
 
 function writeOutputFile(
 	graph: Graph,
+	build: RollupBuild | RollupSingleFileBuild,
 	outputFileName: string,
 	outputFile: OutputFile,
 	outputOptions: OutputOptions
@@ -484,17 +481,13 @@ function writeOutputFile(
 		.then(
 			() =>
 				isOutputChunk(outputFile) &&
-				Promise.all(
-					graph.plugins
-						.filter(plugin => plugin.onwrite)
-						.map(plugin =>
-							plugin.onwrite.call(
-								graph.pluginContext,
-								{ bundle: outputFile, ...outputOptions },
-								outputFile
-							)
-						)
-				)
+				graph.pluginDriver.hookSeq('onwrite', [
+					{
+						bundle: build,
+						...outputOptions
+					},
+					outputFile
+				])
 		)
 		.then(() => {});
 }
